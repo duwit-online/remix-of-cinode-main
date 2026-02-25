@@ -1,38 +1,38 @@
-import { useState } from "react";
-import Navbar from "@/components/Navbar";
-import HeroSection from "@/components/HeroSection";
-import CategoryRow from "@/components/CategoryRow";
-import MovieModal from "@/components/MovieModal";
-import { movies, categories, Movie } from "@/data/movies";
+import { useTrending, usePopularMovies, useTopRatedMovies, useNowPlaying, useUpcoming, usePopularTV, useTopRatedTV, useAiringToday } from "@/hooks/useTMDB";
+import TMDBRow from "@/components/TMDBRow";
+import TMDBHero from "@/components/TMDBHero";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const Index = () => {
-  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
+  const { data: trending } = useTrending();
+  const { data: popular } = usePopularMovies();
+  const { data: topRated } = useTopRatedMovies();
+  const { data: nowPlaying } = useNowPlaying();
+  const { data: upcoming } = useUpcoming();
+  const { data: popularTV } = usePopularTV();
+  const { data: topRatedTV } = useTopRatedTV();
+  const { data: airingToday } = useAiringToday();
 
-  const featuredMovie = movies.find((m) => m.featured)!;
-
-  const getMoviesForCategory = (ids: string[]) =>
-    ids.map((id) => movies.find((m) => m.id === id)!).filter(Boolean);
-
-  const variants: Array<"default" | "wide" | "tall"> = ["default", "wide", "tall", "default"];
+  const heroItem = trending?.results?.[0];
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-      <HeroSection movie={featuredMovie} onSelect={setSelectedMovie} />
+    <div className="min-h-screen bg-background pb-20 md:pb-0">
+      {heroItem ? (
+        <TMDBHero item={heroItem} />
+      ) : (
+        <Skeleton className="h-[70vh] w-full" />
+      )}
 
-      <div className="relative -mt-16 z-10 pb-20">
-        {categories.map((cat, i) => (
-          <CategoryRow
-            key={cat.name}
-            title={cat.name}
-            movieList={getMoviesForCategory(cat.movies)}
-            variant={variants[i % variants.length]}
-            onSelectMovie={setSelectedMovie}
-          />
-        ))}
+      <div className="relative -mt-12 z-10">
+        <TMDBRow title="🔥 Trending Now" items={trending?.results || []} variant="default" />
+        <TMDBRow title="🎬 Popular Movies" items={popular?.results || []} variant="wide" />
+        <TMDBRow title="⭐ Top Rated" items={topRated?.results || []} variant="tall" />
+        <TMDBRow title="🎥 Now Playing" items={nowPlaying?.results || []} variant="default" />
+        <TMDBRow title="📅 Coming Soon" items={upcoming?.results || []} variant="wide" />
+        <TMDBRow title="📺 Popular TV Shows" items={popularTV?.results || []} variant="default" />
+        <TMDBRow title="🏆 Top Rated TV" items={topRatedTV?.results || []} variant="tall" />
+        <TMDBRow title="📡 Airing Today" items={airingToday?.results || []} variant="default" />
       </div>
-
-      <MovieModal movie={selectedMovie} onClose={() => setSelectedMovie(null)} />
     </div>
   );
 };

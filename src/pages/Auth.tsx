@@ -1,0 +1,119 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import { Eye, EyeOff, Mail, Lock, User, ArrowRight } from "lucide-react";
+
+const Auth = () => {
+  const [isLogin, setIsLogin] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const navigate = useNavigate();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Simple localStorage auth for demo
+    if (isLogin) {
+      const users = JSON.parse(localStorage.getItem("cinode_users") || "[]");
+      const user = users.find((u: any) => u.email === email && u.password === password);
+      if (user) {
+        localStorage.setItem("cinode_user", JSON.stringify(user));
+        navigate("/");
+      } else {
+        alert("Invalid credentials");
+      }
+    } else {
+      const users = JSON.parse(localStorage.getItem("cinode_users") || "[]");
+      const newUser = { id: Date.now(), name, email, password, collections: [], watchlist: [] };
+      users.push(newUser);
+      localStorage.setItem("cinode_users", JSON.stringify(users));
+      localStorage.setItem("cinode_user", JSON.stringify(newUser));
+      navigate("/");
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md"
+      >
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-display font-black text-gradient mb-2">CINODE</h1>
+          <p className="text-muted-foreground text-sm">
+            {isLogin ? "Welcome back! Sign in to continue." : "Create your account to get started."}
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="glass rounded-3xl p-6 border border-border/30 space-y-4">
+          {!isLogin && (
+            <div className="relative">
+              <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Full name"
+                className="w-full bg-secondary/50 border border-border/30 rounded-xl pl-11 pr-4 py-3 text-sm outline-none focus:border-primary/50"
+                required
+              />
+            </div>
+          )}
+
+          <div className="relative">
+            <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email address"
+              className="w-full bg-secondary/50 border border-border/30 rounded-xl pl-11 pr-4 py-3 text-sm outline-none focus:border-primary/50"
+              required
+            />
+          </div>
+
+          <div className="relative">
+            <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              className="w-full bg-secondary/50 border border-border/30 rounded-xl pl-11 pr-11 py-3 text-sm outline-none focus:border-primary/50"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:brightness-110 transition-all glow-primary"
+          >
+            {isLogin ? "Sign In" : "Create Account"}
+            <ArrowRight size={16} />
+          </button>
+        </form>
+
+        <p className="text-center text-sm text-muted-foreground mt-4">
+          {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
+          <button
+            onClick={() => setIsLogin(!isLogin)}
+            className="text-primary font-semibold hover:underline"
+          >
+            {isLogin ? "Sign Up" : "Sign In"}
+          </button>
+        </p>
+      </motion.div>
+    </div>
+  );
+};
+
+export default Auth;

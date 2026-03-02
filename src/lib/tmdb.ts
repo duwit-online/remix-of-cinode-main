@@ -148,29 +148,18 @@ export const getMediaType = (item: TMDBMovie): "movie" | "tv" => {
   return item.title ? "movie" : "tv";
 };
 
-// Streaming URLs
+// Streaming URL - uses vidsrc-embed.ru with TMDB IDs
 export const getStreamUrl = (
-  server: number,
   mediaType: "movie" | "tv",
   id: number,
   season?: number,
   episode?: number
 ) => {
-  const isTV = mediaType === "tv";
-  switch (server) {
-    case 1: // AutoEmbed
-      return isTV
-        ? `https://autoembed.cc/tv/tmdb/${id}/${season}/${episode}`
-        : `https://autoembed.cc/movie/tmdb/${id}`;
-    case 2: // VidSrcMe
-      return isTV
-        ? `https://vidsrcme.su/embed/tv/${id}/${season}/${episode}`
-        : `https://vidsrcme.su/embed/movie/${id}`;
-    case 3: // SuperEmbed
-      return isTV
-        ? `https://www.superembed.stream/tv/${id}/${season}/${episode}`
-        : `https://www.superembed.stream/movie/${id}`;
-    default:
-      return "";
+  if (mediaType === "tv" && season && episode) {
+    return `https://vidsrc-embed.ru/embed/tv/${id}/${season}-${episode}`;
   }
+  if (mediaType === "tv") {
+    return `https://vidsrc-embed.ru/embed/tv/${id}`;
+  }
+  return `https://vidsrc-embed.ru/embed/movie/${id}`;
 };

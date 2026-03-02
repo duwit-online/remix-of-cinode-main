@@ -1,17 +1,12 @@
 import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Monitor, Maximize2, Server } from "lucide-react";
+import { ArrowLeft, Maximize2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMovieDetail, useTVDetail, useSeasonDetail, useSimilar } from "@/hooks/useTMDB";
 import { getStreamUrl, getBackdropUrl, getImageUrl, getTitle } from "@/lib/tmdb";
 import TMDBRow from "@/components/TMDBRow";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const servers = [
-  { id: 1, name: "AutoEmbed", label: "Server 1" },
-  { id: 2, name: "VidSrcMe", label: "Server 2" },
-  { id: 3, name: "SuperEmbed", label: "Server 3" },
-];
 
 const Watch = () => {
   const { type, id } = useParams<{ type: string; id: string }>();
@@ -19,7 +14,6 @@ const Watch = () => {
   const mediaType = type as "movie" | "tv";
   const tmdbId = Number(id);
 
-  const [activeServer, setActiveServer] = useState(1);
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
   const [theaterMode, setTheaterMode] = useState(true);
@@ -36,11 +30,8 @@ const Watch = () => {
   const { data: similar } = useSimilar(mediaType, tmdbId);
 
   const streamUrl = useMemo(() => {
-    if (mediaType === "tv") {
-      return getStreamUrl(activeServer, "tv", tmdbId, season, episode);
-    }
-    return getStreamUrl(activeServer, "movie", tmdbId);
-  }, [activeServer, mediaType, tmdbId, season, episode]);
+    return getStreamUrl(mediaType, tmdbId, mediaType === "tv" ? season : undefined, mediaType === "tv" ? episode : undefined);
+  }, [mediaType, tmdbId, season, episode]);
 
   if (isLoading) {
     return (
@@ -85,26 +76,7 @@ const Watch = () => {
         </div>
       </motion.div>
 
-      {/* Controls */}
       <div className="max-w-5xl mx-auto px-4 mt-4 space-y-4">
-        {/* Server Switcher */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <Server size={16} className="text-muted-foreground" />
-          <span className="text-xs text-muted-foreground mr-1">Source:</span>
-          {servers.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setActiveServer(s.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                activeServer === s.id
-                  ? "bg-primary text-primary-foreground glow-primary"
-                  : "bg-secondary/60 text-muted-foreground hover:text-foreground hover:bg-secondary"
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
 
         {/* TV Show Season/Episode Selector */}
         {mediaType === "tv" && detail && (

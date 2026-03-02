@@ -47,7 +47,9 @@ export interface TMDBDetail extends TMDBMovie {
   genres: { id: number; name: string }[];
   tagline?: string;
   status?: string;
+  imdb_id?: string;
   seasons?: TMDBSeason[];
+  external_ids?: { imdb_id?: string };
 }
 
 export interface TMDBSeason {
@@ -148,18 +150,22 @@ export const getMediaType = (item: TMDBMovie): "movie" | "tv" => {
   return item.title ? "movie" : "tv";
 };
 
-// Streaming URL - uses vidsrc-embed.ru with TMDB IDs
+// Detail with external IDs for TV
+export const getTVExternalIds = (id: number) =>
+  tmdbFetch<{ imdb_id?: string }>(`/tv/${id}/external_ids`);
+
+// Streaming URL - uses vsembed.ru with IMDB IDs
 export const getStreamUrl = (
   mediaType: "movie" | "tv",
-  id: number,
+  imdbId: string,
   season?: number,
   episode?: number
 ) => {
   if (mediaType === "tv" && season && episode) {
-    return `https://vidsrc-embed.ru/embed/tv/${id}/${season}-${episode}`;
+    return `https://vsembed.ru/embed/tv/${imdbId}/${season}-${episode}`;
   }
   if (mediaType === "tv") {
-    return `https://vidsrc-embed.ru/embed/tv/${id}`;
+    return `https://vsembed.ru/embed/tv/${imdbId}`;
   }
-  return `https://vidsrc-embed.ru/embed/movie/${id}`;
+  return `https://vsembed.ru/embed/movie/${imdbId}`;
 };

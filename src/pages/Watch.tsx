@@ -3,7 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Maximize2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMovieDetail, useTVDetail, useSeasonDetail, useSimilar } from "@/hooks/useTMDB";
-import { getStreamUrl, getBackdropUrl, getImageUrl, getTitle } from "@/lib/tmdb";
+import { getStreamUrl, getBackdropUrl, getImageUrl, getTitle, getTVExternalIds } from "@/lib/tmdb";
+import { useQuery } from "@tanstack/react-query";
 import TMDBRow from "@/components/TMDBRow";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -29,9 +30,21 @@ const Watch = () => {
   );
   const { data: similar } = useSimilar(mediaType, tmdbId);
 
+  // Get IMDB ID: for movies it's in the detail, for TV we fetch external_ids
+  const { data: tvExternalIds } = useQuery({
+    queryKey: ["tvExternalIds", tmdbId],
+    queryFn: () => getTVExternalIds(tmdbId),
+    enabled: mediaType === "tv",
+  });
+
+  const imdbId = mediaType === "movie" 
+    ? (movieDetail as any)?.imdb_id 
+    : tvExternalIds?.imdb_id;
+
   const streamUrl = useMemo(() => {
-    return getStreamUrl(mediaType, tmdbId, mediaType === "tv" ? season : undefined, mediaType === "tv" ? episode : undefined);
-  }, [mediaType, tmdbId, season, episode]);
+    if (!imdbId) return "";
+    return getStreamUrl(mediaType, imdbId, mediaType === "tv" ? season : undefined, mediaType === "tv" ? episode : undefined);
+  }, [mediaType, imdbId, season, episode]);
 
   if (isLoading) {
     return (
@@ -66,13 +79,19 @@ const Watch = () => {
         className={`pt-14 ${theaterMode ? "" : "max-w-5xl mx-auto px-4"}`}
       >
         <div className={`relative bg-black ${theaterMode ? "w-full aspect-video" : "rounded-2xl overflow-hidden aspect-video"}`}>
-          <iframe
-            key={streamUrl}
-            src={streamUrl}
-            className="w-full h-full"
-            allowFullScreen
-            sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"
-          />
+          {streamUrl ? (
+            <iframe
+              key={streamUrl}
+              src={streamUrl}
+              className="w-full h-full"
+              allowFullScreen
+              sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+              Loading player...
+            </div>
+          )}
         </div>
       </motion.div>
 

@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
 import Navbar from "@/components/Navbar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import Index from "./pages/Index";
@@ -12,6 +13,7 @@ import Movies from "./pages/Movies";
 import TVShows from "./pages/TVShows";
 import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
+import Admin from "./pages/Admin";
 import Collections from "./pages/Collections";
 import NotFound from "./pages/NotFound";
 
@@ -23,19 +25,22 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Navbar />
-        <MobileBottomNav />
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/watch/:type/:id" element={<Watch />} />
-          <Route path="/search" element={<Search />} />
-          <Route path="/movies" element={<Movies />} />
-          <Route path="/tv" element={<TVShows />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/collections" element={<Collections />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <Navbar />
+          <MobileBottomNav />
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/watch/:type/:id" element={<Watch />} />
+            <Route path="/search" element={<Search />} />
+            <Route path="/movies" element={<Movies />} />
+            <Route path="/tv" element={<TVShows />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/collections" element={<Collections />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

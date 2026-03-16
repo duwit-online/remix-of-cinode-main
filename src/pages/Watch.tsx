@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useMovieDetail, useTVDetail, useSeasonDetail, useSimilar } from "@/hooks/useTMDB";
 import { getStreamUrl, getBackdropUrl, getImageUrl, getTitle, getTVExternalIds } from "@/lib/tmdb";
 import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import TMDBRow from "@/components/TMDBRow";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -30,6 +31,20 @@ const Watch = () => {
   );
   const { data: similar } = useSimilar(mediaType, tmdbId);
 
+  // Check for admin override
+  const { data: override } = useQuery({
+    queryKey: ["movieOverride", tmdbId, mediaType, season, episode],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("movie_overrides")
+        .select("*")
+        .eq("tmdb_id", tmdbId)
+        .eq("media_type", mediaType)
+        .maybeSingle();
+      return data;
+    },
+  });
+
   // Get IMDB ID: for movies it's in the detail, for TV we fetch external_ids
   const { data: tvExternalIds } = useQuery({
     queryKey: ["tvExternalIds", tmdbId],
@@ -42,9 +57,11 @@ const Watch = () => {
     : tvExternalIds?.imdb_id;
 
   const streamUrl = useMemo(() => {
+    // Admin override takes priority
+    if ((override as any)?.custom_url) return (override as any).custom_url;
     if (!imdbId) return "";
     return getStreamUrl(mediaType, imdbId, mediaType === "tv" ? season : undefined, mediaType === "tv" ? episode : undefined);
-  }, [mediaType, imdbId, season, episode]);
+  }, [mediaType, imdbId, season, episode, override]);
 
   if (isLoading) {
     return (

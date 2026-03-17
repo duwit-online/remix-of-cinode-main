@@ -14,6 +14,90 @@ export type Database = {
   }
   public: {
     Tables: {
+      ads: {
+        Row: {
+          ad_type: string
+          clicks: number
+          content_html: string | null
+          created_at: string
+          created_by: string | null
+          end_date: string | null
+          id: string
+          image_url: string | null
+          impressions: number
+          is_active: boolean
+          link_url: string | null
+          name: string
+          placement: string
+          priority: number
+          start_date: string | null
+          updated_at: string
+          video_url: string | null
+        }
+        Insert: {
+          ad_type: string
+          clicks?: number
+          content_html?: string | null
+          created_at?: string
+          created_by?: string | null
+          end_date?: string | null
+          id?: string
+          image_url?: string | null
+          impressions?: number
+          is_active?: boolean
+          link_url?: string | null
+          name: string
+          placement?: string
+          priority?: number
+          start_date?: string | null
+          updated_at?: string
+          video_url?: string | null
+        }
+        Update: {
+          ad_type?: string
+          clicks?: number
+          content_html?: string | null
+          created_at?: string
+          created_by?: string | null
+          end_date?: string | null
+          id?: string
+          image_url?: string | null
+          impressions?: number
+          is_active?: boolean
+          link_url?: string | null
+          name?: string
+          placement?: string
+          priority?: number
+          start_date?: string | null
+          updated_at?: string
+          video_url?: string | null
+        }
+        Relationships: []
+      }
+      app_settings: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
       movie_overrides: {
         Row: {
           created_at: string
@@ -50,6 +134,45 @@ export type Database = {
           season?: number | null
           tmdb_id?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_read: boolean
+          message: string
+          target: string
+          target_user_id: string | null
+          title: string
+          type: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_read?: boolean
+          message: string
+          target?: string
+          target_user_id?: string | null
+          title: string
+          type?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_read?: boolean
+          message?: string
+          target?: string
+          target_user_id?: string | null
+          title?: string
+          type?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -97,6 +220,36 @@ export type Database = {
         Update: {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      watchlist: {
+        Row: {
+          added_at: string
+          id: string
+          media_type: string
+          poster_path: string | null
+          title: string | null
+          tmdb_id: number
+          user_id: string
+        }
+        Insert: {
+          added_at?: string
+          id?: string
+          media_type: string
+          poster_path?: string | null
+          title?: string | null
+          tmdb_id: number
+          user_id: string
+        }
+        Update: {
+          added_at?: string
+          id?: string
+          media_type?: string
+          poster_path?: string | null
+          title?: string | null
+          tmdb_id?: number
           user_id?: string
         }
         Relationships: []

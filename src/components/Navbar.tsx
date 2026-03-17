@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { Search, Bell, User } from "lucide-react";
+import { Search, User, Bookmark } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useLocation } from "react-router-dom";
+import NotificationBell from "@/components/NotificationBell";
 
 const navItems = [
   { label: "Home", path: "/" },
   { label: "Movies", path: "/movies" },
   { label: "TV Shows", path: "/tv" },
+  { label: "Watchlist", path: "/watchlist" },
   { label: "Collections", path: "/collections" },
 ];
 
@@ -66,20 +68,13 @@ const Navbar = () => {
           </AnimatePresence>
           <button
             onClick={() => {
-              if (searchOpen) {
-                navigate("/search");
-                setSearchOpen(false);
-              } else {
-                setSearchOpen(true);
-              }
+              if (searchOpen) { navigate("/search"); setSearchOpen(false); } else { setSearchOpen(true); }
             }}
             className="p-2 rounded-full hover:bg-secondary/50 transition-colors text-muted-foreground hover:text-foreground"
           >
             <Search size={18} />
           </button>
-          <button className="p-2 rounded-full hover:bg-secondary/50 transition-colors text-muted-foreground hover:text-foreground">
-            <Bell size={18} />
-          </button>
+          <NotificationBell />
           <button
             onClick={() => navigate("/profile")}
             className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center"

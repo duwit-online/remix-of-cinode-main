@@ -5,8 +5,8 @@ const tabs = [
   { icon: Home, label: "Home", path: "/" },
   { icon: Search, label: "Search", path: "/search" },
   { icon: Film, label: "Movies", path: "/movies" },
-  { icon: Tv, label: "TV Shows", path: "/tv" },
-  { icon: Bookmark, label: "Collections", path: "/collections" },
+  { icon: Tv, label: "TV", path: "/tv" },
+  { icon: Bookmark, label: "Watchlist", path: "/watchlist" },
   { icon: User, label: "Profile", path: "/profile" },
 ];
 

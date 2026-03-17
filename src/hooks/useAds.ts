@@ -16,8 +16,10 @@ export const useActiveAds = (placement?: string) => {
 
 export const useTrackAdClick = () => {
   return async (adId: string) => {
-    await supabase.rpc("increment_ad_clicks" as any, { ad_id: adId }).catch(() => {
-      // Fallback: just track client-side
-    });
+    try {
+      await supabase.rpc("increment_ad_clicks" as any, { ad_id: adId });
+    } catch {
+      // silent
+    }
   };
 };

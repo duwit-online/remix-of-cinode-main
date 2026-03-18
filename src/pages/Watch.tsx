@@ -29,7 +29,7 @@ const Watch = () => {
   const [theaterMode, setTheaterMode] = useState(true);
   const [adDone, setAdDone] = useState(false);
   const [videoError, setVideoError] = useState(false);
-  const [iframeFailed, setIframeFailed] = useState(false);
+  const [embedIndex, setEmbedIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const { data: movieDetail, isLoading: movieLoading } = useMovieDetail(tmdbId);

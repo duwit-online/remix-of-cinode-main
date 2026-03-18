@@ -154,18 +154,60 @@ export const getMediaType = (item: TMDBMovie): "movie" | "tv" => {
 export const getTVExternalIds = (id: number) =>
   tmdbFetch<{ imdb_id?: string }>(`/tv/${id}/external_ids`);
 
-// Streaming URL - uses vsembed.ru with IMDB IDs
+// Streaming embed providers with fallback chain
+export interface EmbedProvider {
+  name: string;
+  getUrl: (mediaType: "movie" | "tv", imdbId: string, tmdbId: number, season?: number, episode?: number) => string;
+}
+
+export const embedProviders: EmbedProvider[] = [
+  {
+    name: "vidsrc.cc",
+    getUrl: (mediaType, _imdbId, tmdbId, season, episode) => {
+      if (mediaType === "tv" && season && episode) {
+        return `https://vidsrc.cc/v2/embed/tv/${tmdbId}/${season}/${episode}`;
+      }
+      return `https://vidsrc.cc/v2/embed/${mediaType}/${tmdbId}`;
+    },
+  },
+  {
+    name: "vidsrc.icu",
+    getUrl: (mediaType, _imdbId, tmdbId, season, episode) => {
+      if (mediaType === "tv" && season && episode) {
+        return `https://vidsrc.icu/embed/tv/${tmdbId}/${season}/${episode}`;
+      }
+      return `https://vidsrc.icu/embed/${mediaType}/${tmdbId}`;
+    },
+  },
+  {
+    name: "embed.su",
+    getUrl: (mediaType, _imdbId, tmdbId, season, episode) => {
+      if (mediaType === "tv" && season && episode) {
+        return `https://embed.su/embed/${mediaType}/${tmdbId}/${season}/${episode}`;
+      }
+      return `https://embed.su/embed/${mediaType}/${tmdbId}`;
+    },
+  },
+  {
+    name: "vsembed",
+    getUrl: (mediaType, imdbId, _tmdbId, season, episode) => {
+      if (mediaType === "tv" && season && episode) {
+        return `https://vsembed.ru/embed/tv/${imdbId}/${season}-${episode}`;
+      }
+      if (mediaType === "tv") {
+        return `https://vsembed.ru/embed/tv/${imdbId}`;
+      }
+      return `https://vsembed.ru/embed/movie/${imdbId}`;
+    },
+  },
+];
+
+// Legacy helper (returns first provider URL)
 export const getStreamUrl = (
   mediaType: "movie" | "tv",
   imdbId: string,
   season?: number,
   episode?: number
 ) => {
-  if (mediaType === "tv" && season && episode) {
-    return `https://vsembed.ru/embed/tv/${imdbId}/${season}-${episode}`;
-  }
-  if (mediaType === "tv") {
-    return `https://vsembed.ru/embed/tv/${imdbId}`;
-  }
-  return `https://vsembed.ru/embed/movie/${imdbId}`;
+  return embedProviders[0].getUrl(mediaType, imdbId, 0, season, episode);
 };

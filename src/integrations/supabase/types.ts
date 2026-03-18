@@ -206,6 +206,45 @@ export type Database = {
         }
         Relationships: []
       }
+      streaming_servers: {
+        Row: {
+          api_key_encrypted: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_enabled: boolean
+          name: string
+          priority: number
+          server_type: string
+          server_url: string
+          updated_at: string
+        }
+        Insert: {
+          api_key_encrypted: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_enabled?: boolean
+          name: string
+          priority?: number
+          server_type?: string
+          server_url: string
+          updated_at?: string
+        }
+        Update: {
+          api_key_encrypted?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_enabled?: boolean
+          name?: string
+          priority?: number
+          server_type?: string
+          server_url?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string

@@ -1,9 +1,9 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Maximize2, Bookmark, BookmarkCheck, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Maximize2, Bookmark, BookmarkCheck, AlertTriangle, SkipForward } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMovieDetail, useTVDetail, useSeasonDetail, useSimilar } from "@/hooks/useTMDB";
-import { getStreamUrl, getImageUrl, getTitle, getTVExternalIds } from "@/lib/tmdb";
+import { embedProviders, getImageUrl, getTitle, getTVExternalIds } from "@/lib/tmdb";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,7 +15,7 @@ import PreRollAd from "@/components/PreRollAd";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
 
-type PlayerSource = "jellyfin" | "override" | "vsembed" | "none";
+type PlayerSource = "jellyfin" | "override" | "embed" | "none";
 
 const Watch = () => {
   const { type, id } = useParams<{ type: string; id: string }>();
@@ -29,7 +29,7 @@ const Watch = () => {
   const [theaterMode, setTheaterMode] = useState(true);
   const [adDone, setAdDone] = useState(false);
   const [videoError, setVideoError] = useState(false);
-  const [iframeFailed, setIframeFailed] = useState(false);
+  const [embedIndex, setEmbedIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const { data: movieDetail, isLoading: movieLoading } = useMovieDetail(tmdbId);
@@ -88,14 +88,22 @@ const Watch = () => {
       return { activeSource: "override", streamUrl: (override as any).custom_url };
     }
 
-    // 3. vsembed iframe fallback
-    if (imdbId) {
-      const url = getStreamUrl(mediaType, imdbId, mediaType === "tv" ? season : undefined, mediaType === "tv" ? episode : undefined);
-      return { activeSource: "vsembed", streamUrl: url };
+    // 3. Embed providers fallback chain
+    if (embedIndex < embedProviders.length) {
+      const provider = embedProviders[embedIndex];
+      const url = provider.getUrl(mediaType, imdbId || "", tmdbId, mediaType === "tv" ? season : undefined, mediaType === "tv" ? episode : undefined);
+      return { activeSource: "embed", streamUrl: url };
     }
 
     return { activeSource: "none", streamUrl: "" };
-  }, [jellyfinData, videoError, override, imdbId, mediaType, season, episode]);
+  }, [jellyfinData, videoError, override, imdbId, mediaType, season, episode, tmdbId, embedIndex]);
+
+  const tryNextEmbed = useCallback(() => {
+    if (embedIndex < embedProviders.length - 1) {
+      setEmbedIndex(prev => prev + 1);
+      toast({ title: "Trying another source...", description: `Switching to ${embedProviders[embedIndex + 1].name}` });
+    }
+  }, [embedIndex]);
 
   const handleToggleWatchlist = () => {
     if (!user) {
@@ -113,6 +121,7 @@ const Watch = () => {
 
   const handleVideoError = () => {
     setVideoError(true);
+    setEmbedIndex(0);
     console.warn("Jellyfin video playback failed, falling back...");
   };
 
@@ -145,7 +154,7 @@ const Watch = () => {
       );
     }
 
-    if ((activeSource === "override" || activeSource === "vsembed") && streamUrl) {
+    if ((activeSource === "override" || activeSource === "embed") && streamUrl) {
       // Check if override URL is a direct video file
       const isDirectVideo = /\.(mp4|mkv|webm|m3u8)(\?|$)/i.test(streamUrl);
       if (isDirectVideo && activeSource === "override") {
@@ -161,14 +170,23 @@ const Watch = () => {
       }
 
       return (
-        <iframe
-          key={streamUrl}
-          src={streamUrl}
-          className="w-full h-full"
-          allowFullScreen
-          sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"
-          onError={() => setIframeFailed(true)}
-        />
+        <div className="relative w-full h-full">
+          <iframe
+            key={streamUrl}
+            src={streamUrl}
+            className="w-full h-full"
+            allowFullScreen
+            sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"
+          />
+          {activeSource === "embed" && embedIndex < embedProviders.length - 1 && (
+            <button
+              onClick={tryNextEmbed}
+              className="absolute bottom-4 right-4 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-secondary/80 backdrop-blur text-xs text-foreground hover:bg-secondary transition-colors"
+            >
+              <SkipForward size={14} /> Try next source
+            </button>
+          )}
+        </div>
       );
     }
 
@@ -219,7 +237,7 @@ const Watch = () => {
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted-foreground">Season</label>
-              <select value={season} onChange={(e) => { setSeason(Number(e.target.value)); setEpisode(1); setVideoError(false); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
+              <select value={season} onChange={(e) => { setSeason(Number(e.target.value)); setEpisode(1); setVideoError(false); setEmbedIndex(0); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
                 {(detail.seasons || []).filter((s) => s.season_number > 0).map((s) => (
                   <option key={s.season_number} value={s.season_number}>{s.name}</option>
                 ))}
@@ -227,7 +245,7 @@ const Watch = () => {
             </div>
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted-foreground">Episode</label>
-              <select value={episode} onChange={(e) => { setEpisode(Number(e.target.value)); setVideoError(false); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
+              <select value={episode} onChange={(e) => { setEpisode(Number(e.target.value)); setVideoError(false); setEmbedIndex(0); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
                 {seasonData?.episodes?.map((ep) => (
                   <option key={ep.episode_number} value={ep.episode_number}>Ep {ep.episode_number}: {ep.name}</option>
                 )) || (
@@ -263,7 +281,7 @@ const Watch = () => {
             <h3 className="font-display font-bold text-base mb-3">Episodes</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {seasonData.episodes.map((ep) => (
-                <button key={ep.episode_number} onClick={() => { setEpisode(ep.episode_number); setVideoError(false); }}
+                <button key={ep.episode_number} onClick={() => { setEpisode(ep.episode_number); setVideoError(false); setEmbedIndex(0); }}
                   className={`text-left p-3 rounded-xl transition-all ${episode === ep.episode_number ? "bg-primary/10 border border-primary/30" : "bg-secondary/30 border border-border/20 hover:bg-secondary/50"}`}
                 >
                   <div className="flex gap-3">

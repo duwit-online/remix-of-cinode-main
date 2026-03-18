@@ -1,9 +1,9 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Maximize2, Bookmark, BookmarkCheck, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Maximize2, Bookmark, BookmarkCheck, AlertTriangle, SkipForward } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMovieDetail, useTVDetail, useSeasonDetail, useSimilar } from "@/hooks/useTMDB";
-import { getStreamUrl, getImageUrl, getTitle, getTVExternalIds } from "@/lib/tmdb";
+import { embedProviders, getImageUrl, getTitle, getTVExternalIds } from "@/lib/tmdb";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,7 +15,7 @@ import PreRollAd from "@/components/PreRollAd";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
 
-type PlayerSource = "jellyfin" | "override" | "vsembed" | "none";
+type PlayerSource = "jellyfin" | "override" | "embed" | "none";
 
 const Watch = () => {
   const { type, id } = useParams<{ type: string; id: string }>();

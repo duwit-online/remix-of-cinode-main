@@ -88,14 +88,22 @@ const Watch = () => {
       return { activeSource: "override", streamUrl: (override as any).custom_url };
     }
 
-    // 3. vsembed iframe fallback
-    if (imdbId) {
-      const url = getStreamUrl(mediaType, imdbId, mediaType === "tv" ? season : undefined, mediaType === "tv" ? episode : undefined);
-      return { activeSource: "vsembed", streamUrl: url };
+    // 3. Embed providers fallback chain
+    if (embedIndex < embedProviders.length) {
+      const provider = embedProviders[embedIndex];
+      const url = provider.getUrl(mediaType, imdbId || "", tmdbId, mediaType === "tv" ? season : undefined, mediaType === "tv" ? episode : undefined);
+      return { activeSource: "embed", streamUrl: url };
     }
 
     return { activeSource: "none", streamUrl: "" };
-  }, [jellyfinData, videoError, override, imdbId, mediaType, season, episode]);
+  }, [jellyfinData, videoError, override, imdbId, mediaType, season, episode, tmdbId, embedIndex]);
+
+  const tryNextEmbed = useCallback(() => {
+    if (embedIndex < embedProviders.length - 1) {
+      setEmbedIndex(prev => prev + 1);
+      toast({ title: "Trying another source...", description: `Switching to ${embedProviders[embedIndex + 1].name}` });
+    }
+  }, [embedIndex]);
 
   const handleToggleWatchlist = () => {
     if (!user) {

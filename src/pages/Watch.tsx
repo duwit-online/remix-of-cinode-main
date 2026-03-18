@@ -1,18 +1,21 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Maximize2, Bookmark, BookmarkCheck, Download } from "lucide-react";
+import { ArrowLeft, Maximize2, Bookmark, BookmarkCheck, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMovieDetail, useTVDetail, useSeasonDetail, useSimilar } from "@/hooks/useTMDB";
-import { getStreamUrl, getBackdropUrl, getImageUrl, getTitle, getTVExternalIds } from "@/lib/tmdb";
+import { getStreamUrl, getImageUrl, getTitle, getTVExternalIds } from "@/lib/tmdb";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsInWatchlist, useToggleWatchlist } from "@/hooks/useWatchlist";
+import { useJellyfinStream } from "@/hooks/useJellyfinStream";
 import TMDBRow from "@/components/TMDBRow";
 import AdBanner from "@/components/AdBanner";
 import PreRollAd from "@/components/PreRollAd";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
+
+type PlayerSource = "jellyfin" | "override" | "vsembed" | "none";
 
 const Watch = () => {
   const { type, id } = useParams<{ type: string; id: string }>();
@@ -25,6 +28,9 @@ const Watch = () => {
   const [episode, setEpisode] = useState(1);
   const [theaterMode, setTheaterMode] = useState(true);
   const [adDone, setAdDone] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+  const [iframeFailed, setIframeFailed] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const { data: movieDetail, isLoading: movieLoading } = useMovieDetail(tmdbId);
   const { data: tvDetail, isLoading: tvLoading } = useTVDetail(tmdbId);
@@ -37,6 +43,15 @@ const Watch = () => {
   const isInWatchlist = useIsInWatchlist(tmdbId, mediaType);
   const toggleWatchlist = useToggleWatchlist();
 
+  // Jellyfin stream lookup
+  const { data: jellyfinData, isLoading: jellyfinLoading } = useJellyfinStream(
+    tmdbId,
+    mediaType,
+    mediaType === "tv" ? season : undefined,
+    mediaType === "tv" ? episode : undefined
+  );
+
+  // DB override
   const { data: override } = useQuery({
     queryKey: ["movieOverride", tmdbId, mediaType, season, episode],
     queryFn: async () => {
@@ -50,6 +65,7 @@ const Watch = () => {
     },
   });
 
+  // IMDB ID for vsembed fallback
   const { data: tvExternalIds } = useQuery({
     queryKey: ["tvExternalIds", tmdbId],
     queryFn: () => getTVExternalIds(tmdbId),
@@ -60,11 +76,26 @@ const Watch = () => {
     ? (movieDetail as any)?.imdb_id
     : tvExternalIds?.imdb_id;
 
-  const streamUrl = useMemo(() => {
-    if ((override as any)?.custom_url) return (override as any).custom_url;
-    if (!imdbId) return "";
-    return getStreamUrl(mediaType, imdbId, mediaType === "tv" ? season : undefined, mediaType === "tv" ? episode : undefined);
-  }, [mediaType, imdbId, season, episode, override]);
+  // Determine which source to use (fallback chain)
+  const { activeSource, streamUrl } = useMemo((): { activeSource: PlayerSource; streamUrl: string } => {
+    // 1. Jellyfin (highest priority)
+    if (jellyfinData?.stream_url && !videoError) {
+      return { activeSource: "jellyfin", streamUrl: jellyfinData.stream_url };
+    }
+
+    // 2. DB override
+    if ((override as any)?.custom_url) {
+      return { activeSource: "override", streamUrl: (override as any).custom_url };
+    }
+
+    // 3. vsembed iframe fallback
+    if (imdbId) {
+      const url = getStreamUrl(mediaType, imdbId, mediaType === "tv" ? season : undefined, mediaType === "tv" ? episode : undefined);
+      return { activeSource: "vsembed", streamUrl: url };
+    }
+
+    return { activeSource: "none", streamUrl: "" };
+  }, [jellyfinData, videoError, override, imdbId, mediaType, season, episode]);
 
   const handleToggleWatchlist = () => {
     if (!user) {
@@ -80,6 +111,11 @@ const Watch = () => {
     });
   };
 
+  const handleVideoError = () => {
+    setVideoError(true);
+    console.warn("Jellyfin video playback failed, falling back...");
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background pt-16 px-4">
@@ -87,6 +123,63 @@ const Watch = () => {
       </div>
     );
   }
+
+  const renderPlayer = () => {
+    if (!adDone) return <PreRollAd onComplete={() => setAdDone(true)} />;
+
+    if (jellyfinLoading) {
+      return <div className="w-full h-full flex items-center justify-center text-muted-foreground">Checking streaming servers...</div>;
+    }
+
+    if (activeSource === "jellyfin") {
+      return (
+        <video
+          ref={videoRef}
+          src={streamUrl}
+          className="w-full h-full bg-black"
+          controls
+          autoPlay
+          onError={handleVideoError}
+          crossOrigin="anonymous"
+        />
+      );
+    }
+
+    if ((activeSource === "override" || activeSource === "vsembed") && streamUrl) {
+      // Check if override URL is a direct video file
+      const isDirectVideo = /\.(mp4|mkv|webm|m3u8)(\?|$)/i.test(streamUrl);
+      if (isDirectVideo && activeSource === "override") {
+        return (
+          <video
+            src={streamUrl}
+            className="w-full h-full bg-black"
+            controls
+            autoPlay
+            crossOrigin="anonymous"
+          />
+        );
+      }
+
+      return (
+        <iframe
+          key={streamUrl}
+          src={streamUrl}
+          className="w-full h-full"
+          allowFullScreen
+          sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"
+          onError={() => setIframeFailed(true)}
+        />
+      );
+    }
+
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2">
+        <AlertTriangle size={32} className="text-yellow-500" />
+        <p className="text-sm">No playback source available</p>
+        <p className="text-xs">This content is not available on any configured server.</p>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
@@ -97,6 +190,11 @@ const Watch = () => {
         <h1 className="font-display font-bold text-sm truncate flex-1">
           {detail ? getTitle(detail as any) : "Loading..."}
         </h1>
+        {activeSource !== "none" && (
+          <span className="px-2 py-0.5 rounded-md bg-secondary/60 text-[10px] text-muted-foreground uppercase hidden sm:block">
+            {activeSource === "jellyfin" && jellyfinData?.server_name ? jellyfinData.server_name : activeSource}
+          </span>
+        )}
         <button onClick={handleToggleWatchlist} className="p-2 rounded-full hover:bg-secondary/50 transition-colors">
           {isInWatchlist ? <BookmarkCheck size={18} className="text-primary" /> : <Bookmark size={18} className="text-muted-foreground" />}
         </button>
@@ -110,12 +208,7 @@ const Watch = () => {
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`pt-14 ${theaterMode ? "" : "max-w-5xl mx-auto px-4"}`}>
         <div className={`relative bg-background ${theaterMode ? "w-full aspect-video" : "rounded-2xl overflow-hidden aspect-video"}`}>
-          {!adDone && <PreRollAd onComplete={() => setAdDone(true)} />}
-          {adDone && streamUrl ? (
-            <iframe key={streamUrl} src={streamUrl} className="w-full h-full" allowFullScreen sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation" />
-          ) : adDone ? (
-            <div className="w-full h-full flex items-center justify-center text-muted-foreground">Loading player...</div>
-          ) : null}
+          {renderPlayer()}
         </div>
       </motion.div>
 
@@ -126,7 +219,7 @@ const Watch = () => {
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted-foreground">Season</label>
-              <select value={season} onChange={(e) => { setSeason(Number(e.target.value)); setEpisode(1); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
+              <select value={season} onChange={(e) => { setSeason(Number(e.target.value)); setEpisode(1); setVideoError(false); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
                 {(detail.seasons || []).filter((s) => s.season_number > 0).map((s) => (
                   <option key={s.season_number} value={s.season_number}>{s.name}</option>
                 ))}
@@ -134,7 +227,7 @@ const Watch = () => {
             </div>
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted-foreground">Episode</label>
-              <select value={episode} onChange={(e) => setEpisode(Number(e.target.value))} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
+              <select value={episode} onChange={(e) => { setEpisode(Number(e.target.value)); setVideoError(false); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
                 {seasonData?.episodes?.map((ep) => (
                   <option key={ep.episode_number} value={ep.episode_number}>Ep {ep.episode_number}: {ep.name}</option>
                 )) || (
@@ -170,7 +263,7 @@ const Watch = () => {
             <h3 className="font-display font-bold text-base mb-3">Episodes</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {seasonData.episodes.map((ep) => (
-                <button key={ep.episode_number} onClick={() => setEpisode(ep.episode_number)}
+                <button key={ep.episode_number} onClick={() => { setEpisode(ep.episode_number); setVideoError(false); }}
                   className={`text-left p-3 rounded-xl transition-all ${episode === ep.episode_number ? "bg-primary/10 border border-primary/30" : "bg-secondary/30 border border-border/20 hover:bg-secondary/50"}`}
                 >
                   <div className="flex gap-3">

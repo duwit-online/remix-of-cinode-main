@@ -1,1 +1,4 @@
 project_id = "ttavcvrltdrawujsblft"
+
+[functions.jellyfin-proxy]
+verify_jwt = false

@@ -281,7 +281,7 @@ const Watch = () => {
             <h3 className="font-display font-bold text-base mb-3">Episodes</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {seasonData.episodes.map((ep) => (
-                <button key={ep.episode_number} onClick={() => { setEpisode(ep.episode_number); setVideoError(false); }}
+                <button key={ep.episode_number} onClick={() => { setEpisode(ep.episode_number); setVideoError(false); setEmbedIndex(0); }}
                   className={`text-left p-3 rounded-xl transition-all ${episode === ep.episode_number ? "bg-primary/10 border border-primary/30" : "bg-secondary/30 border border-border/20 hover:bg-secondary/50"}`}
                 >
                   <div className="flex gap-3">

@@ -1,18 +1,20 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Shield, Settings, Users, Film, Megaphone, Bell, ArrowLeft, Download } from "lucide-react";
+import { Shield, Settings, Users, Film, Megaphone, Bell, ArrowLeft, Server } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import AdminSettings from "@/components/admin/AdminSettings";
 import AdminUsers from "@/components/admin/AdminUsers";
 import AdminContent from "@/components/admin/AdminContent";
 import AdminAds from "@/components/admin/AdminAds";
 import AdminNotifications from "@/components/admin/AdminNotifications";
+import AdminServers from "@/components/admin/AdminServers";
 
-type Tab = "settings" | "users" | "content" | "ads" | "notifications";
+type Tab = "settings" | "users" | "content" | "servers" | "ads" | "notifications";
 
 const tabs: { id: Tab; label: string; icon: any }[] = [
   { id: "settings", label: "Settings", icon: Settings },
+  { id: "servers", label: "Servers", icon: Server },
   { id: "content", label: "Content", icon: Film },
   { id: "users", label: "Users", icon: Users },
   { id: "ads", label: "Ads", icon: Megaphone },

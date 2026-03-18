@@ -121,6 +121,7 @@ const Watch = () => {
 
   const handleVideoError = () => {
     setVideoError(true);
+    setEmbedIndex(0);
     console.warn("Jellyfin video playback failed, falling back...");
   };
 

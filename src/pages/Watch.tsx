@@ -237,7 +237,7 @@ const Watch = () => {
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted-foreground">Season</label>
-              <select value={season} onChange={(e) => { setSeason(Number(e.target.value)); setEpisode(1); setVideoError(false); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
+              <select value={season} onChange={(e) => { setSeason(Number(e.target.value)); setEpisode(1); setVideoError(false); setEmbedIndex(0); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
                 {(detail.seasons || []).filter((s) => s.season_number > 0).map((s) => (
                   <option key={s.season_number} value={s.season_number}>{s.name}</option>
                 ))}

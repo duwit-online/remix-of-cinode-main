@@ -245,7 +245,7 @@ const Watch = () => {
             </div>
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted-foreground">Episode</label>
-              <select value={episode} onChange={(e) => { setEpisode(Number(e.target.value)); setVideoError(false); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
+              <select value={episode} onChange={(e) => { setEpisode(Number(e.target.value)); setVideoError(false); setEmbedIndex(0); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
                 {seasonData?.episodes?.map((ep) => (
                   <option key={ep.episode_number} value={ep.episode_number}>Ep {ep.episode_number}: {ep.name}</option>
                 )) || (

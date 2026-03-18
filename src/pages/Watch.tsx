@@ -153,7 +153,7 @@ const Watch = () => {
       );
     }
 
-    if ((activeSource === "override" || activeSource === "vsembed") && streamUrl) {
+    if ((activeSource === "override" || activeSource === "embed") && streamUrl) {
       // Check if override URL is a direct video file
       const isDirectVideo = /\.(mp4|mkv|webm|m3u8)(\?|$)/i.test(streamUrl);
       if (isDirectVideo && activeSource === "override") {
@@ -169,14 +169,23 @@ const Watch = () => {
       }
 
       return (
-        <iframe
-          key={streamUrl}
-          src={streamUrl}
-          className="w-full h-full"
-          allowFullScreen
-          sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"
-          onError={() => setIframeFailed(true)}
-        />
+        <div className="relative w-full h-full">
+          <iframe
+            key={streamUrl}
+            src={streamUrl}
+            className="w-full h-full"
+            allowFullScreen
+            sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"
+          />
+          {activeSource === "embed" && embedIndex < embedProviders.length - 1 && (
+            <button
+              onClick={tryNextEmbed}
+              className="absolute bottom-4 right-4 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-secondary/80 backdrop-blur text-xs text-foreground hover:bg-secondary transition-colors"
+            >
+              <SkipForward size={14} /> Try next source
+            </button>
+          )}
+        </div>
       );
     }
 

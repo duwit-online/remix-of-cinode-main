@@ -70,6 +70,7 @@ const Admin = () => {
         </div>
 
         {activeTab === "settings" && <AdminSettings />}
+        {activeTab === "servers" && <AdminServers />}
         {activeTab === "content" && <AdminContent />}
         {activeTab === "users" && <AdminUsers />}
         {activeTab === "ads" && <AdminAds />}

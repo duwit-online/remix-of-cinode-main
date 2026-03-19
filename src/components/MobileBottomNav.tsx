@@ -1,4 +1,4 @@
-import { Home, Search, Film, Tv, User, Bookmark } from "lucide-react";
+import { Home, Search, Film, Tv, User, Download } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const tabs = [
@@ -6,7 +6,7 @@ const tabs = [
   { icon: Search, label: "Search", path: "/search" },
   { icon: Film, label: "Movies", path: "/movies" },
   { icon: Tv, label: "TV", path: "/tv" },
-  { icon: Bookmark, label: "Watchlist", path: "/watchlist" },
+  { icon: Download, label: "Downloads", path: "/downloads" },
   { icon: User, label: "Profile", path: "/profile" },
 ];
 

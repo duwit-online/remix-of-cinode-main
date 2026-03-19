@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Maximize2, Bookmark, BookmarkCheck, AlertTriangle, SkipForward } from "lucide-react";
+import { ArrowLeft, Maximize2, Bookmark, BookmarkCheck, AlertTriangle, Download } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMovieDetail, useTVDetail, useSeasonDetail, useSimilar } from "@/hooks/useTMDB";
 import { embedProviders, getImageUrl, getTitle, getTVExternalIds } from "@/lib/tmdb";
@@ -101,7 +101,6 @@ const Watch = () => {
   const tryNextEmbed = useCallback(() => {
     if (embedIndex < embedProviders.length - 1) {
       setEmbedIndex(prev => prev + 1);
-      toast({ title: "Trying another source...", description: `Switching to ${embedProviders[embedIndex + 1].name}` });
     }
   }, [embedIndex]);
 
@@ -170,23 +169,14 @@ const Watch = () => {
       }
 
       return (
-        <div className="relative w-full h-full">
-          <iframe
-            key={streamUrl}
-            src={streamUrl}
-            className="w-full h-full"
-            allowFullScreen
-            sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"
-          />
-          {activeSource === "embed" && embedIndex < embedProviders.length - 1 && (
-            <button
-              onClick={tryNextEmbed}
-              className="absolute bottom-4 right-4 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-secondary/80 backdrop-blur text-xs text-foreground hover:bg-secondary transition-colors"
-            >
-              <SkipForward size={14} /> Try next source
-            </button>
-          )}
-        </div>
+        <iframe
+          key={streamUrl}
+          src={streamUrl}
+          className="w-full h-full"
+          allowFullScreen
+          sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"
+          onError={tryNextEmbed}
+        />
       );
     }
 
@@ -208,10 +198,17 @@ const Watch = () => {
         <h1 className="font-display font-bold text-sm truncate flex-1">
           {detail ? getTitle(detail as any) : "Loading..."}
         </h1>
-        {activeSource !== "none" && (
-          <span className="px-2 py-0.5 rounded-md bg-secondary/60 text-[10px] text-muted-foreground uppercase hidden sm:block">
-            {activeSource === "jellyfin" && jellyfinData?.server_name ? jellyfinData.server_name : activeSource}
-          </span>
+        {(activeSource === "jellyfin" || (activeSource === "override" && /\.(mp4|mkv|webm|m3u8)(\?|$)/i.test(streamUrl))) && (
+          <a
+            href={streamUrl}
+            download
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 rounded-full hover:bg-secondary/50 transition-colors"
+            title="Download for offline viewing"
+          >
+            <Download size={18} className="text-muted-foreground" />
+          </a>
         )}
         <button onClick={handleToggleWatchlist} className="p-2 rounded-full hover:bg-secondary/50 transition-colors">
           {isInWatchlist ? <BookmarkCheck size={18} className="text-primary" /> : <Bookmark size={18} className="text-muted-foreground" />}

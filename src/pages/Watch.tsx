@@ -1,6 +1,6 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Maximize2, Bookmark, BookmarkCheck, AlertTriangle, Download } from "lucide-react";
+import { ArrowLeft, Maximize2, Bookmark, BookmarkCheck, AlertTriangle, Download, CheckCircle2, PictureInPicture2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMovieDetail, useTVDetail, useSeasonDetail, useSimilar } from "@/hooks/useTMDB";
 import { embedProviders, getImageUrl, getTitle, getTVExternalIds } from "@/lib/tmdb";
@@ -9,13 +9,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsInWatchlist, useToggleWatchlist } from "@/hooks/useWatchlist";
 import { useJellyfinStream } from "@/hooks/useJellyfinStream";
+import { usePlaybackProgress } from "@/hooks/usePlaybackProgress";
+import { useOfflineDownload } from "@/hooks/useOfflineDownload";
 import TMDBRow from "@/components/TMDBRow";
 import AdBanner from "@/components/AdBanner";
 import PreRollAd from "@/components/PreRollAd";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
 
-type PlayerSource = "jellyfin" | "override" | "embed" | "none";
+type PlayerSource = "offline" | "jellyfin" | "override" | "embed" | "none";
 
 const Watch = () => {
   const { type, id } = useParams<{ type: string; id: string }>();
@@ -31,6 +34,7 @@ const Watch = () => {
   const [videoError, setVideoError] = useState(false);
   const [embedIndex, setEmbedIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const hasResumed = useRef(false);
 
   const { data: movieDetail, isLoading: movieLoading } = useMovieDetail(tmdbId);
   const { data: tvDetail, isLoading: tvLoading } = useTVDetail(tmdbId);
@@ -43,15 +47,12 @@ const Watch = () => {
   const isInWatchlist = useIsInWatchlist(tmdbId, mediaType);
   const toggleWatchlist = useToggleWatchlist();
 
-  // Jellyfin stream lookup
   const { data: jellyfinData, isLoading: jellyfinLoading } = useJellyfinStream(
-    tmdbId,
-    mediaType,
+    tmdbId, mediaType,
     mediaType === "tv" ? season : undefined,
     mediaType === "tv" ? episode : undefined
   );
 
-  // DB override
   const { data: override } = useQuery({
     queryKey: ["movieOverride", tmdbId, mediaType, season, episode],
     queryFn: async () => {
@@ -65,7 +66,6 @@ const Watch = () => {
     },
   });
 
-  // IMDB ID for vsembed fallback
   const { data: tvExternalIds } = useQuery({
     queryKey: ["tvExternalIds", tmdbId],
     queryFn: () => getTVExternalIds(tmdbId),
@@ -76,33 +76,85 @@ const Watch = () => {
     ? (movieDetail as any)?.imdb_id
     : tvExternalIds?.imdb_id;
 
-  // Determine which source to use (fallback chain)
+  // Playback progress tracking
+  const { savedTime, updateProgress, clearProgress } = usePlaybackProgress(
+    mediaType, tmdbId,
+    mediaType === "tv" ? season : undefined,
+    mediaType === "tv" ? episode : undefined
+  );
+
+  // Determine raw stream URL (before offline check)
+  const rawStreamUrl = useMemo(() => {
+    if (jellyfinData?.stream_url && !videoError) return jellyfinData.stream_url;
+    if ((override as any)?.custom_url) return (override as any).custom_url;
+    return "";
+  }, [jellyfinData, videoError, override]);
+
+  const isDirectVideo = /\.(mp4|mkv|webm|m3u8)(\?|$)/i.test(rawStreamUrl);
+
+  // Offline download
+  const { isDownloaded, isDownloading, progress: dlProgress, offlineUrl, download, removeDownload } = useOfflineDownload(
+    rawStreamUrl,
+    mediaType, tmdbId,
+    detail ? getTitle(detail as any) : "",
+    detail?.poster_path || "",
+    mediaType === "tv" ? season : undefined,
+    mediaType === "tv" ? episode : undefined
+  );
+
+  // Source fallback chain
   const { activeSource, streamUrl } = useMemo((): { activeSource: PlayerSource; streamUrl: string } => {
-    // 1. Jellyfin (highest priority)
-    if (jellyfinData?.stream_url && !videoError) {
-      return { activeSource: "jellyfin", streamUrl: jellyfinData.stream_url };
-    }
-
+    // 0. Offline cached video (highest priority)
+    if (offlineUrl) return { activeSource: "offline", streamUrl: offlineUrl };
+    // 1. Jellyfin
+    if (jellyfinData?.stream_url && !videoError) return { activeSource: "jellyfin", streamUrl: jellyfinData.stream_url };
     // 2. DB override
-    if ((override as any)?.custom_url) {
-      return { activeSource: "override", streamUrl: (override as any).custom_url };
-    }
-
-    // 3. Embed providers fallback chain
+    if ((override as any)?.custom_url) return { activeSource: "override", streamUrl: (override as any).custom_url };
+    // 3. Embed providers
     if (embedIndex < embedProviders.length) {
       const provider = embedProviders[embedIndex];
       const url = provider.getUrl(mediaType, imdbId || "", tmdbId, mediaType === "tv" ? season : undefined, mediaType === "tv" ? episode : undefined);
       return { activeSource: "embed", streamUrl: url };
     }
-
     return { activeSource: "none", streamUrl: "" };
-  }, [jellyfinData, videoError, override, imdbId, mediaType, season, episode, tmdbId, embedIndex]);
+  }, [offlineUrl, jellyfinData, videoError, override, imdbId, mediaType, season, episode, tmdbId, embedIndex]);
 
   const tryNextEmbed = useCallback(() => {
-    if (embedIndex < embedProviders.length - 1) {
-      setEmbedIndex(prev => prev + 1);
-    }
+    if (embedIndex < embedProviders.length - 1) setEmbedIndex(prev => prev + 1);
   }, [embedIndex]);
+
+  // Resume + volume setup when video element is ready
+  useEffect(() => {
+    const vid = videoRef.current;
+    if (!vid) return;
+    vid.volume = 1;
+
+    const onLoaded = () => {
+      if (savedTime > 0 && !hasResumed.current) {
+        vid.currentTime = savedTime;
+        hasResumed.current = true;
+        toast({ title: "Resuming playback", description: `Continuing from ${formatTime(savedTime)}` });
+      }
+    };
+
+    const onTimeUpdate = () => {
+      updateProgress(vid.currentTime, vid.duration);
+    };
+
+    const onEnded = () => clearProgress();
+
+    vid.addEventListener("loadedmetadata", onLoaded);
+    vid.addEventListener("timeupdate", onTimeUpdate);
+    vid.addEventListener("ended", onEnded);
+    return () => {
+      vid.removeEventListener("loadedmetadata", onLoaded);
+      vid.removeEventListener("timeupdate", onTimeUpdate);
+      vid.removeEventListener("ended", onEnded);
+    };
+  }, [savedTime, updateProgress, clearProgress, activeSource]);
+
+  // Reset resume flag on source change
+  useEffect(() => { hasResumed.current = false; }, [season, episode, tmdbId]);
 
   const handleToggleWatchlist = () => {
     if (!user) {
@@ -110,8 +162,7 @@ const Watch = () => {
       return;
     }
     toggleWatchlist.mutate({
-      tmdbId,
-      mediaType,
+      tmdbId, mediaType,
       title: detail ? getTitle(detail as any) : "",
       posterPath: detail?.poster_path || "",
       isInList: isInWatchlist,
@@ -121,7 +172,20 @@ const Watch = () => {
   const handleVideoError = () => {
     setVideoError(true);
     setEmbedIndex(0);
-    console.warn("Jellyfin video playback failed, falling back...");
+  };
+
+  const togglePiP = async () => {
+    const vid = videoRef.current;
+    if (!vid) return;
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        await vid.requestPictureInPicture();
+      }
+    } catch (e) {
+      toast({ title: "PiP unavailable", description: "Picture-in-Picture is not supported in this browser." });
+    }
   };
 
   if (isLoading) {
@@ -132,14 +196,13 @@ const Watch = () => {
     );
   }
 
+  const isNativeVideo = activeSource === "offline" || activeSource === "jellyfin" || (activeSource === "override" && isDirectVideo);
+
   const renderPlayer = () => {
     if (!adDone) return <PreRollAd onComplete={() => setAdDone(true)} />;
+    if (jellyfinLoading) return <div className="w-full h-full flex items-center justify-center text-muted-foreground">Loading...</div>;
 
-    if (jellyfinLoading) {
-      return <div className="w-full h-full flex items-center justify-center text-muted-foreground">Checking streaming servers...</div>;
-    }
-
-    if (activeSource === "jellyfin") {
+    if (isNativeVideo) {
       return (
         <video
           ref={videoRef}
@@ -154,20 +217,6 @@ const Watch = () => {
     }
 
     if ((activeSource === "override" || activeSource === "embed") && streamUrl) {
-      // Check if override URL is a direct video file
-      const isDirectVideo = /\.(mp4|mkv|webm|m3u8)(\?|$)/i.test(streamUrl);
-      if (isDirectVideo && activeSource === "override") {
-        return (
-          <video
-            src={streamUrl}
-            className="w-full h-full bg-black"
-            controls
-            autoPlay
-            crossOrigin="anonymous"
-          />
-        );
-      }
-
       return (
         <iframe
           key={streamUrl}
@@ -184,32 +233,50 @@ const Watch = () => {
       <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2">
         <AlertTriangle size={32} className="text-yellow-500" />
         <p className="text-sm">No playback source available</p>
-        <p className="text-xs">This content is not available on any configured server.</p>
       </div>
     );
   };
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
-      <div className="fixed top-0 left-0 right-0 z-50 glass px-4 py-3 flex items-center gap-3">
+      {/* Top bar */}
+      <div className="fixed top-0 left-0 right-0 z-50 glass px-4 py-3 flex items-center gap-2">
         <button onClick={() => navigate(-1)} className="p-2 rounded-full hover:bg-secondary/50 transition-colors">
           <ArrowLeft size={20} />
         </button>
         <h1 className="font-display font-bold text-sm truncate flex-1">
           {detail ? getTitle(detail as any) : "Loading..."}
         </h1>
-        {(activeSource === "jellyfin" || (activeSource === "override" && /\.(mp4|mkv|webm|m3u8)(\?|$)/i.test(streamUrl))) && (
-          <a
-            href={streamUrl}
-            download
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-2 rounded-full hover:bg-secondary/50 transition-colors"
-            title="Download for offline viewing"
-          >
-            <Download size={18} className="text-muted-foreground" />
-          </a>
+
+        {/* Download button - always show for direct sources */}
+        {(isNativeVideo && activeSource !== "offline") && (
+          isDownloading ? (
+            <div className="flex items-center gap-1.5 px-2">
+              <Progress value={dlProgress} className="w-16 h-1.5" />
+              <span className="text-[10px] text-muted-foreground">{dlProgress}%</span>
+            </div>
+          ) : isDownloaded ? (
+            <button onClick={removeDownload} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Downloaded (tap to remove)">
+              <CheckCircle2 size={18} className="text-primary" />
+            </button>
+          ) : (
+            <button onClick={download} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Download for offline">
+              <Download size={18} className="text-muted-foreground" />
+            </button>
+          )
         )}
+
+        {activeSource === "offline" && (
+          <span className="text-[10px] text-primary font-medium px-2">Offline</span>
+        )}
+
+        {/* PiP button */}
+        {isNativeVideo && (
+          <button onClick={togglePiP} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Picture-in-Picture">
+            <PictureInPicture2 size={18} className="text-muted-foreground" />
+          </button>
+        )}
+
         <button onClick={handleToggleWatchlist} className="p-2 rounded-full hover:bg-secondary/50 transition-colors">
           {isInWatchlist ? <BookmarkCheck size={18} className="text-primary" /> : <Bookmark size={18} className="text-muted-foreground" />}
         </button>
@@ -221,12 +288,14 @@ const Watch = () => {
         </button>
       </div>
 
+      {/* Player */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`pt-14 ${theaterMode ? "" : "max-w-5xl mx-auto px-4"}`}>
         <div className={`relative bg-background ${theaterMode ? "w-full aspect-video" : "rounded-2xl overflow-hidden aspect-video"}`}>
           {renderPlayer()}
         </div>
       </motion.div>
 
+      {/* Details */}
       <div className="max-w-5xl mx-auto px-4 mt-4 space-y-4">
         <AdBanner placement="watch_page" className="mb-4" />
 
@@ -303,5 +372,13 @@ const Watch = () => {
     </div>
   );
 };
+
+function formatTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
 
 export default Watch;

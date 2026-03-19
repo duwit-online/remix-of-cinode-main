@@ -101,7 +101,6 @@ const Watch = () => {
   const tryNextEmbed = useCallback(() => {
     if (embedIndex < embedProviders.length - 1) {
       setEmbedIndex(prev => prev + 1);
-      toast({ title: "Trying another source...", description: `Switching to ${embedProviders[embedIndex + 1].name}` });
     }
   }, [embedIndex]);
 

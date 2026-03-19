@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Maximize2, Bookmark, BookmarkCheck, AlertTriangle, SkipForward } from "lucide-react";
+import { ArrowLeft, Maximize2, Bookmark, BookmarkCheck, AlertTriangle, Download } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMovieDetail, useTVDetail, useSeasonDetail, useSimilar } from "@/hooks/useTMDB";
 import { embedProviders, getImageUrl, getTitle, getTVExternalIds } from "@/lib/tmdb";

@@ -16,6 +16,7 @@ import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
 import Collections from "./pages/Collections";
 import Watchlist from "./pages/Watchlist";
+import Downloads from "./pages/Downloads";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const App = () => (
             <Route path="/admin" element={<Admin />} />
             <Route path="/collections" element={<Collections />} />
             <Route path="/watchlist" element={<Watchlist />} />
+            <Route path="/downloads" element={<Downloads />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

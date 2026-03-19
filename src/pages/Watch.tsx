@@ -210,6 +210,7 @@ const Watch = () => {
           className="w-full h-full bg-black"
           controls
           autoPlay
+          muted={false}
           onError={handleVideoError}
           crossOrigin="anonymous"
         />
@@ -248,34 +249,30 @@ const Watch = () => {
           {detail ? getTitle(detail as any) : "Loading..."}
         </h1>
 
-        {/* Download button - always show for direct sources */}
-        {(isNativeVideo && activeSource !== "offline") && (
-          isDownloading ? (
-            <div className="flex items-center gap-1.5 px-2">
-              <Progress value={dlProgress} className="w-16 h-1.5" />
-              <span className="text-[10px] text-muted-foreground">{dlProgress}%</span>
-            </div>
-          ) : isDownloaded ? (
-            <button onClick={removeDownload} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Downloaded (tap to remove)">
-              <CheckCircle2 size={18} className="text-primary" />
-            </button>
-          ) : (
-            <button onClick={download} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Download for offline">
-              <Download size={18} className="text-muted-foreground" />
-            </button>
-          )
+        {/* Download button - always visible */}
+        {isDownloading ? (
+          <div className="flex items-center gap-1.5 px-2">
+            <Progress value={dlProgress} className="w-16 h-1.5" />
+            <span className="text-[10px] text-muted-foreground">{dlProgress}%</span>
+          </div>
+        ) : isDownloaded ? (
+          <button onClick={removeDownload} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Downloaded (tap to remove)">
+            <CheckCircle2 size={18} className="text-primary" />
+          </button>
+        ) : (
+          <button onClick={download} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Download for offline">
+            <Download size={18} className="text-muted-foreground" />
+          </button>
         )}
 
         {activeSource === "offline" && (
           <span className="text-[10px] text-primary font-medium px-2">Offline</span>
         )}
 
-        {/* PiP button */}
-        {isNativeVideo && (
-          <button onClick={togglePiP} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Picture-in-Picture">
-            <PictureInPicture2 size={18} className="text-muted-foreground" />
-          </button>
-        )}
+        {/* PiP button - always visible for native video */}
+        <button onClick={togglePiP} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Picture-in-Picture">
+          <PictureInPicture2 size={18} className="text-muted-foreground" />
+        </button>
 
         <button onClick={handleToggleWatchlist} className="p-2 rounded-full hover:bg-secondary/50 transition-colors">
           {isInWatchlist ? <BookmarkCheck size={18} className="text-primary" /> : <Bookmark size={18} className="text-muted-foreground" />}

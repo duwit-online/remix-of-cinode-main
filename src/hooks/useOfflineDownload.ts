@@ -91,7 +91,7 @@ export function useOfflineDownload(
         if (contentLength > 0) setProgress(Math.round((received / contentLength) * 100));
       }
 
-      const blob = new Blob(chunks);
+      const blob = new Blob(chunks as unknown as BlobPart[]);
       const db = await openDB();
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);

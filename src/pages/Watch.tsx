@@ -210,6 +210,7 @@ const Watch = () => {
           className="w-full h-full bg-black"
           controls
           autoPlay
+          muted={false}
           onError={handleVideoError}
           crossOrigin="anonymous"
         />

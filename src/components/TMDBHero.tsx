@@ -47,7 +47,7 @@ const TMDBHero = ({ item }: TMDBHeroProps) => {
           <div className="flex items-center gap-3 mb-4 text-sm text-muted-foreground">
             <span className="flex items-center gap-1 text-primary font-semibold">
               <Star size={14} className="fill-primary" />
-              {item.vote_average.toFixed(1)}
+              {(item.vote_average ?? 0).toFixed(1)}
             </span>
           </div>
 

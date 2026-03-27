@@ -53,7 +53,7 @@ const TMDBCard = ({ item, variant = "default", index = 0 }: TMDBCardProps) => {
         <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
           <span className="flex items-center gap-0.5 text-primary">
             <Star size={8} className="fill-primary" />
-            {item.vote_average.toFixed(1)}
+            {(item.vote_average ?? 0).toFixed(1)}
           </span>
           <span>{getYear(item)}</span>
         </div>

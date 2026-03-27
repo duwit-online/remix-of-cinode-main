@@ -1,6 +1,8 @@
 import { useTrending, usePopularMovies, useTopRatedMovies, useNowPlaying, useUpcoming, usePopularTV, useTopRatedTV, useAiringToday } from "@/hooks/useTMDB";
 import TMDBRow from "@/components/TMDBRow";
 import TMDBHero from "@/components/TMDBHero";
+import ContinueWatchingRow from "@/components/ContinueWatchingRow";
+import AdBanner from "@/components/AdBanner";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const Index = () => {
@@ -24,11 +26,15 @@ const Index = () => {
       )}
 
       <div className="relative -mt-12 z-10">
+        <ContinueWatchingRow />
+        <AdBanner placement="homepage" className="mx-4 md:mx-8 mb-4" />
         <TMDBRow title="🔥 Trending Now" items={trending?.results || []} variant="default" />
         <TMDBRow title="🎬 Popular Movies" items={popular?.results || []} variant="wide" />
+        <AdBanner placement="homepage" className="mx-4 md:mx-8 mb-4" />
         <TMDBRow title="⭐ Top Rated" items={topRated?.results || []} variant="tall" />
         <TMDBRow title="🎥 Now Playing" items={nowPlaying?.results || []} variant="default" />
         <TMDBRow title="📅 Coming Soon" items={upcoming?.results || []} variant="wide" />
+        <AdBanner placement="homepage" className="mx-4 md:mx-8 mb-4" />
         <TMDBRow title="📺 Popular TV Shows" items={popularTV?.results || []} variant="default" />
         <TMDBRow title="🏆 Top Rated TV" items={topRatedTV?.results || []} variant="tall" />
         <TMDBRow title="📡 Airing Today" items={airingToday?.results || []} variant="default" />

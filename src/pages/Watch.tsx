@@ -11,6 +11,7 @@ import { useIsInWatchlist, useToggleWatchlist } from "@/hooks/useWatchlist";
 import { useJellyfinStream } from "@/hooks/useJellyfinStream";
 import { usePlaybackProgress } from "@/hooks/usePlaybackProgress";
 import { useOfflineDownload } from "@/hooks/useOfflineDownload";
+import { useTelegramBridge } from "@/hooks/useTelegramBridge";
 import TMDBRow from "@/components/TMDBRow";
 import AdBanner from "@/components/AdBanner";
 import PreRollAd from "@/components/PreRollAd";
@@ -18,7 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
 
-type PlayerSource = "offline" | "jellyfin" | "override" | "embed" | "none";
+type PlayerSource = "offline" | "telegram_bridge" | "jellyfin" | "override" | "embed" | "none";
 
 const Watch = () => {
   const { type, id } = useParams<{ type: string; id: string }>();
@@ -32,6 +33,7 @@ const Watch = () => {
   const [theaterMode, setTheaterMode] = useState(true);
   const [adDone, setAdDone] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [bridgeError, setBridgeError] = useState(false);
   const [embedIndex, setEmbedIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hasResumed = useRef(false);
@@ -46,6 +48,13 @@ const Watch = () => {
 
   const isInWatchlist = useIsInWatchlist(tmdbId, mediaType);
   const toggleWatchlist = useToggleWatchlist();
+
+  // Telegram Bridge - FIRST fallback
+  const { data: bridgeData, isLoading: bridgeLoading } = useTelegramBridge(
+    tmdbId, mediaType,
+    mediaType === "tv" ? season : undefined,
+    mediaType === "tv" ? episode : undefined
+  );
 
   const { data: jellyfinData, isLoading: jellyfinLoading } = useJellyfinStream(
     tmdbId, mediaType,
@@ -83,12 +92,13 @@ const Watch = () => {
     mediaType === "tv" ? episode : undefined
   );
 
-  // Determine raw stream URL (before offline check)
+  // Determine raw stream URL for download
   const rawStreamUrl = useMemo(() => {
+    if (bridgeData?.stream_url) return bridgeData.stream_url;
     if (jellyfinData?.stream_url && !videoError) return jellyfinData.stream_url;
     if ((override as any)?.custom_url) return (override as any).custom_url;
     return "";
-  }, [jellyfinData, videoError, override]);
+  }, [bridgeData, jellyfinData, videoError, override]);
 
   const isDirectVideo = /\.(mp4|mkv|webm|m3u8)(\?|$)/i.test(rawStreamUrl);
 
@@ -102,22 +112,24 @@ const Watch = () => {
     mediaType === "tv" ? episode : undefined
   );
 
-  // Source fallback chain
+  // Source fallback chain: Offline > Telegram Bridge > Jellyfin > DB Override > Embeds
   const { activeSource, streamUrl } = useMemo((): { activeSource: PlayerSource; streamUrl: string } => {
-    // 0. Offline cached video (highest priority)
+    // 0. Offline cached video
     if (offlineUrl) return { activeSource: "offline", streamUrl: offlineUrl };
-    // 1. Jellyfin
+    // 1. Telegram Bridge (FIRST live source)
+    if (bridgeData?.stream_url && !bridgeError) return { activeSource: "telegram_bridge", streamUrl: bridgeData.stream_url };
+    // 2. Jellyfin
     if (jellyfinData?.stream_url && !videoError) return { activeSource: "jellyfin", streamUrl: jellyfinData.stream_url };
-    // 2. DB override
+    // 3. DB override
     if ((override as any)?.custom_url) return { activeSource: "override", streamUrl: (override as any).custom_url };
-    // 3. Embed providers
+    // 4. Embed providers
     if (embedIndex < embedProviders.length) {
       const provider = embedProviders[embedIndex];
       const url = provider.getUrl(mediaType, imdbId || "", tmdbId, mediaType === "tv" ? season : undefined, mediaType === "tv" ? episode : undefined);
       return { activeSource: "embed", streamUrl: url };
     }
     return { activeSource: "none", streamUrl: "" };
-  }, [offlineUrl, jellyfinData, videoError, override, imdbId, mediaType, season, episode, tmdbId, embedIndex]);
+  }, [offlineUrl, bridgeData, bridgeError, jellyfinData, videoError, override, imdbId, mediaType, season, episode, tmdbId, embedIndex]);
 
   const tryNextEmbed = useCallback(() => {
     if (embedIndex < embedProviders.length - 1) setEmbedIndex(prev => prev + 1);
@@ -129,7 +141,7 @@ const Watch = () => {
     if (!vid) return;
     vid.volume = 1;
 
-    const onLoaded = () => {
+    const onCanPlay = () => {
       if (savedTime > 0 && !hasResumed.current) {
         vid.currentTime = savedTime;
         hasResumed.current = true;
@@ -138,20 +150,22 @@ const Watch = () => {
     };
 
     const onTimeUpdate = () => {
-      updateProgress(vid.currentTime, vid.duration);
+      if (!isNaN(vid.currentTime) && !isNaN(vid.duration) && vid.duration > 0) {
+        updateProgress(vid.currentTime, vid.duration);
+      }
     };
 
     const onEnded = () => clearProgress();
 
-    vid.addEventListener("loadedmetadata", onLoaded);
+    vid.addEventListener("canplay", onCanPlay);
     vid.addEventListener("timeupdate", onTimeUpdate);
     vid.addEventListener("ended", onEnded);
     return () => {
-      vid.removeEventListener("loadedmetadata", onLoaded);
+      vid.removeEventListener("canplay", onCanPlay);
       vid.removeEventListener("timeupdate", onTimeUpdate);
       vid.removeEventListener("ended", onEnded);
     };
-  }, [savedTime, updateProgress, clearProgress, activeSource]);
+  }, [savedTime, updateProgress, clearProgress, activeSource, streamUrl]);
 
   // Reset resume flag on source change
   useEffect(() => { hasResumed.current = false; }, [season, episode, tmdbId]);
@@ -170,6 +184,11 @@ const Watch = () => {
   };
 
   const handleVideoError = () => {
+    // If telegram bridge stream failed, mark it and fall through
+    if (activeSource === "telegram_bridge") {
+      setBridgeError(true);
+      return;
+    }
     setVideoError(true);
     setEmbedIndex(0);
   };
@@ -196,11 +215,12 @@ const Watch = () => {
     );
   }
 
-  const isNativeVideo = activeSource === "offline" || activeSource === "jellyfin" || (activeSource === "override" && isDirectVideo);
+  const isNativeVideo = activeSource === "offline" || activeSource === "jellyfin" || activeSource === "telegram_bridge" || (activeSource === "override" && isDirectVideo);
+  const isSourceLoading = bridgeLoading || jellyfinLoading;
 
   const renderPlayer = () => {
     if (!adDone) return <PreRollAd onComplete={() => setAdDone(true)} />;
-    if (jellyfinLoading) return <div className="w-full h-full flex items-center justify-center text-muted-foreground">Loading...</div>;
+    if (isSourceLoading && activeSource === "none") return <div className="w-full h-full flex items-center justify-center text-muted-foreground">Loading sources...</div>;
 
     if (isNativeVideo) {
       return (
@@ -210,7 +230,6 @@ const Watch = () => {
           className="w-full h-full bg-black"
           controls
           autoPlay
-          muted={false}
           onError={handleVideoError}
           crossOrigin="anonymous"
         />
@@ -240,59 +259,64 @@ const Watch = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
-      {/* Top bar */}
-      <div className="fixed top-0 left-0 right-0 z-50 glass px-4 py-3 flex items-center gap-2">
-        <button onClick={() => navigate(-1)} className="p-2 rounded-full hover:bg-secondary/50 transition-colors">
-          <ArrowLeft size={20} />
-        </button>
-        <h1 className="font-display font-bold text-sm truncate flex-1">
-          {detail ? getTitle(detail as any) : "Loading..."}
-        </h1>
-
-        {/* Download button - always visible */}
-        {isDownloading ? (
-          <div className="flex items-center gap-1.5 px-2">
-            <Progress value={dlProgress} className="w-16 h-1.5" />
-            <span className="text-[10px] text-muted-foreground">{dlProgress}%</span>
-          </div>
-        ) : isDownloaded ? (
-          <button onClick={removeDownload} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Downloaded (tap to remove)">
-            <CheckCircle2 size={18} className="text-primary" />
+      {/* Sticky top bar + player container */}
+      <div className="sticky top-0 z-40">
+        {/* Top bar */}
+        <div className="glass px-4 py-3 flex items-center gap-2 z-50">
+          <button onClick={() => navigate(-1)} className="p-2 rounded-full hover:bg-secondary/50 transition-colors">
+            <ArrowLeft size={20} />
           </button>
-        ) : (
-          <button onClick={download} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Download for offline">
-            <Download size={18} className="text-muted-foreground" />
+          <h1 className="font-display font-bold text-sm truncate flex-1">
+            {detail ? getTitle(detail as any) : "Loading..."}
+          </h1>
+
+          {/* Download button */}
+          {rawStreamUrl && (
+            isDownloading ? (
+              <div className="flex items-center gap-1.5 px-2">
+                <Progress value={dlProgress} className="w-16 h-1.5" />
+                <span className="text-[10px] text-muted-foreground">{dlProgress}%</span>
+              </div>
+            ) : isDownloaded ? (
+              <button onClick={removeDownload} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Downloaded (tap to remove)">
+                <CheckCircle2 size={18} className="text-primary" />
+              </button>
+            ) : (
+              <button onClick={download} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Download for offline">
+                <Download size={18} className="text-muted-foreground" />
+              </button>
+            )
+          )}
+
+          {activeSource === "offline" && (
+            <span className="text-[10px] text-primary font-medium px-2">Offline</span>
+          )}
+
+          {/* PiP button */}
+          {isNativeVideo && (
+            <button onClick={togglePiP} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Picture-in-Picture">
+              <PictureInPicture2 size={18} className="text-muted-foreground" />
+            </button>
+          )}
+
+          <button onClick={handleToggleWatchlist} className="p-2 rounded-full hover:bg-secondary/50 transition-colors">
+            {isInWatchlist ? <BookmarkCheck size={18} className="text-primary" /> : <Bookmark size={18} className="text-muted-foreground" />}
           </button>
-        )}
+          <button
+            onClick={() => setTheaterMode(!theaterMode)}
+            className={`p-2 rounded-full transition-colors ${theaterMode ? "text-primary bg-primary/10" : "hover:bg-secondary/50 text-muted-foreground"}`}
+          >
+            <Maximize2 size={18} />
+          </button>
+        </div>
 
-        {activeSource === "offline" && (
-          <span className="text-[10px] text-primary font-medium px-2">Offline</span>
-        )}
-
-        {/* PiP button - always visible for native video */}
-        <button onClick={togglePiP} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Picture-in-Picture">
-          <PictureInPicture2 size={18} className="text-muted-foreground" />
-        </button>
-
-        <button onClick={handleToggleWatchlist} className="p-2 rounded-full hover:bg-secondary/50 transition-colors">
-          {isInWatchlist ? <BookmarkCheck size={18} className="text-primary" /> : <Bookmark size={18} className="text-muted-foreground" />}
-        </button>
-        <button
-          onClick={() => setTheaterMode(!theaterMode)}
-          className={`p-2 rounded-full transition-colors ${theaterMode ? "text-primary bg-primary/10" : "hover:bg-secondary/50 text-muted-foreground"}`}
-        >
-          <Maximize2 size={18} />
-        </button>
-      </div>
-
-      {/* Player */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`pt-14 ${theaterMode ? "" : "max-w-5xl mx-auto px-4"}`}>
-        <div className={`relative bg-background ${theaterMode ? "w-full aspect-video" : "rounded-2xl overflow-hidden aspect-video"}`}>
+        {/* Sticky player */}
+        <div className={`relative bg-black ${theaterMode ? "w-full aspect-video" : "max-w-5xl mx-auto aspect-video"}`}>
           {renderPlayer()}
         </div>
-      </motion.div>
+      </div>
 
-      {/* Details */}
+      {/* Details - scrollable below sticky player */}
       <div className="max-w-5xl mx-auto px-4 mt-4 space-y-4">
         <AdBanner placement="watch_page" className="mb-4" />
 
@@ -300,7 +324,7 @@ const Watch = () => {
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted-foreground">Season</label>
-              <select value={season} onChange={(e) => { setSeason(Number(e.target.value)); setEpisode(1); setVideoError(false); setEmbedIndex(0); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
+              <select value={season} onChange={(e) => { setSeason(Number(e.target.value)); setEpisode(1); setVideoError(false); setBridgeError(false); setEmbedIndex(0); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
                 {(detail.seasons || []).filter((s) => s.season_number > 0).map((s) => (
                   <option key={s.season_number} value={s.season_number}>{s.name}</option>
                 ))}
@@ -308,7 +332,7 @@ const Watch = () => {
             </div>
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted-foreground">Episode</label>
-              <select value={episode} onChange={(e) => { setEpisode(Number(e.target.value)); setVideoError(false); setEmbedIndex(0); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
+              <select value={episode} onChange={(e) => { setEpisode(Number(e.target.value)); setVideoError(false); setBridgeError(false); setEmbedIndex(0); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
                 {seasonData?.episodes?.map((ep) => (
                   <option key={ep.episode_number} value={ep.episode_number}>Ep {ep.episode_number}: {ep.name}</option>
                 )) || (
@@ -344,7 +368,7 @@ const Watch = () => {
             <h3 className="font-display font-bold text-base mb-3">Episodes</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {seasonData.episodes.map((ep) => (
-                <button key={ep.episode_number} onClick={() => { setEpisode(ep.episode_number); setVideoError(false); setEmbedIndex(0); }}
+                <button key={ep.episode_number} onClick={() => { setEpisode(ep.episode_number); setVideoError(false); setBridgeError(false); setEmbedIndex(0); }}
                   className={`text-left p-3 rounded-xl transition-all ${episode === ep.episode_number ? "bg-primary/10 border border-primary/30" : "bg-secondary/30 border border-border/20 hover:bg-secondary/50"}`}
                 >
                   <div className="flex gap-3">

@@ -98,6 +98,99 @@ export type Database = {
         }
         Relationships: []
       }
+      email_config: {
+        Row: {
+          api_key_encrypted: string | null
+          from_email: string
+          from_name: string
+          id: string
+          is_active: boolean
+          provider: string
+          smtp_host: string | null
+          smtp_pass_encrypted: string | null
+          smtp_port: number | null
+          smtp_user: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          api_key_encrypted?: string | null
+          from_email?: string
+          from_name?: string
+          id?: string
+          is_active?: boolean
+          provider?: string
+          smtp_host?: string | null
+          smtp_pass_encrypted?: string | null
+          smtp_port?: number | null
+          smtp_user?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          api_key_encrypted?: string | null
+          from_email?: string
+          from_name?: string
+          id?: string
+          is_active?: boolean
+          provider?: string
+          smtp_host?: string | null
+          smtp_pass_encrypted?: string | null
+          smtp_port?: number | null
+          smtp_user?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      media_sources: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          episode: number | null
+          file_name: string | null
+          id: string
+          is_active: boolean
+          media_type: string
+          season: number | null
+          source: string
+          stream_url: string
+          title: string | null
+          tmdb_id: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          episode?: number | null
+          file_name?: string | null
+          id?: string
+          is_active?: boolean
+          media_type?: string
+          season?: number | null
+          source?: string
+          stream_url: string
+          title?: string | null
+          tmdb_id: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          episode?: number | null
+          file_name?: string | null
+          id?: string
+          is_active?: boolean
+          media_type?: string
+          season?: number | null
+          source?: string
+          stream_url?: string
+          title?: string | null
+          tmdb_id?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       movie_overrides: {
         Row: {
           created_at: string

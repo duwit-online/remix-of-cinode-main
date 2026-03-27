@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Shield, Settings, Users, Film, Megaphone, Bell, ArrowLeft, Server } from "lucide-react";
+import { Shield, Settings, Users, Film, Megaphone, Bell, ArrowLeft, Server, Database } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import AdminSettings from "@/components/admin/AdminSettings";
 import AdminUsers from "@/components/admin/AdminUsers";
@@ -9,12 +9,14 @@ import AdminContent from "@/components/admin/AdminContent";
 import AdminAds from "@/components/admin/AdminAds";
 import AdminNotifications from "@/components/admin/AdminNotifications";
 import AdminServers from "@/components/admin/AdminServers";
+import AdminMediaSources from "@/components/admin/AdminMediaSources";
 
-type Tab = "settings" | "users" | "content" | "servers" | "ads" | "notifications";
+type Tab = "settings" | "users" | "content" | "servers" | "media" | "ads" | "notifications";
 
 const tabs: { id: Tab; label: string; icon: any }[] = [
   { id: "settings", label: "Settings", icon: Settings },
   { id: "servers", label: "Servers", icon: Server },
+  { id: "media", label: "Media Sources", icon: Database },
   { id: "content", label: "Content", icon: Film },
   { id: "users", label: "Users", icon: Users },
   { id: "ads", label: "Ads", icon: Megaphone },
@@ -49,7 +51,6 @@ const Admin = () => {
           <h1 className="font-display font-bold text-2xl">Admin Dashboard</h1>
         </div>
 
-        {/* Tabs - scrollable on mobile */}
         <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-hide pb-1">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -71,6 +72,7 @@ const Admin = () => {
 
         {activeTab === "settings" && <AdminSettings />}
         {activeTab === "servers" && <AdminServers />}
+        {activeTab === "media" && <AdminMediaSources />}
         {activeTab === "content" && <AdminContent />}
         {activeTab === "users" && <AdminUsers />}
         {activeTab === "ads" && <AdminAds />}

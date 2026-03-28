@@ -10,6 +10,7 @@ const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -32,6 +33,19 @@ const Auth = () => {
       if (error) {
         setError(error.message);
       } else {
+        // Save referral if provided
+        if (referralCode.trim()) {
+          try {
+            const { supabase } = await import("@/integrations/supabase/client");
+            const { data: aff } = await supabase.from("affiliates").select("id").eq("referral_code", referralCode.trim().toUpperCase()).eq("is_active", true).maybeSingle();
+            if (aff) {
+              const { data: { user: newUser } } = await supabase.auth.getUser();
+              if (newUser) {
+                await supabase.from("referrals").insert({ affiliate_id: aff.id, referred_user_id: newUser.id });
+              }
+            }
+          } catch {}
+        }
         navigate("/");
       }
     }
@@ -60,17 +74,28 @@ const Auth = () => {
           )}
 
           {!isLogin && (
-            <div className="relative">
-              <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Full name"
-                className="w-full bg-secondary/50 border border-border/30 rounded-xl pl-11 pr-4 py-3 text-sm outline-none focus:border-primary/50"
-                required
-              />
-            </div>
+            <>
+              <div className="relative">
+                <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Full name"
+                  className="w-full bg-secondary/50 border border-border/30 rounded-xl pl-11 pr-4 py-3 text-sm outline-none focus:border-primary/50"
+                  required
+                />
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={referralCode}
+                  onChange={(e) => setReferralCode(e.target.value)}
+                  placeholder="Referral code (optional)"
+                  className="w-full bg-secondary/50 border border-border/30 rounded-xl px-4 py-3 text-sm outline-none focus:border-primary/50"
+                />
+              </div>
+            </>
           )}
 
           <div className="relative">

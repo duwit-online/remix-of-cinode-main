@@ -1,6 +1,7 @@
 import { useActiveAds } from "@/hooks/useAds";
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useIsPremium } from "@/hooks/useSubscription";
 
 interface AdBannerProps {
   placement: string;
@@ -9,6 +10,7 @@ interface AdBannerProps {
 
 const AdBanner = ({ placement, className = "" }: AdBannerProps) => {
   const { data: ads } = useActiveAds(placement);
+  const { isPremium } = useIsPremium();
   const tracked = useRef<Set<string>>(new Set());
 
   // Filter to only banner/inline types for display ads
@@ -23,7 +25,7 @@ const AdBanner = ({ placement, className = "" }: AdBannerProps) => {
     }
   }, [ad]);
 
-  if (!ad) return null;
+  if (!ad || isPremium) return null;
 
   const handleClick = () => {
     supabase.from("ads").update({ clicks: (ad.clicks || 0) + 1 } as any).eq("id", ad.id).then(() => {});

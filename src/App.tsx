@@ -17,6 +17,9 @@ import Admin from "./pages/Admin";
 import Collections from "./pages/Collections";
 import Watchlist from "./pages/Watchlist";
 import Downloads from "./pages/Downloads";
+import Premium from "./pages/Premium";
+import Checkout from "./pages/Checkout";
+import AffiliatesDashboard from "./pages/AffiliatesDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +45,9 @@ const App = () => (
             <Route path="/collections" element={<Collections />} />
             <Route path="/watchlist" element={<Watchlist />} />
             <Route path="/downloads" element={<Downloads />} />
+            <Route path="/premium" element={<Premium />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/affiliates" element={<AffiliatesDashboard />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

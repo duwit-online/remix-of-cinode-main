@@ -10,6 +10,7 @@ interface AdBannerProps {
 
 const AdBanner = ({ placement, className = "" }: AdBannerProps) => {
   const { data: ads } = useActiveAds(placement);
+  const { isPremium } = useIsPremium();
   const tracked = useRef<Set<string>>(new Set());
 
   // Filter to only banner/inline types for display ads

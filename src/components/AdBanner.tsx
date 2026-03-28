@@ -1,6 +1,7 @@
 import { useActiveAds } from "@/hooks/useAds";
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useIsPremium } from "@/hooks/useSubscription";
 
 interface AdBannerProps {
   placement: string;

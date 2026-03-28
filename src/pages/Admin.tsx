@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Shield, Settings, Users, Film, Megaphone, Bell, ArrowLeft, Server, Database } from "lucide-react";
+import { Shield, Settings, Users, Film, Megaphone, Bell, ArrowLeft, Server, Database, DollarSign, UserCheck, CreditCard } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import AdminSettings from "@/components/admin/AdminSettings";
 import AdminUsers from "@/components/admin/AdminUsers";
@@ -10,11 +10,17 @@ import AdminAds from "@/components/admin/AdminAds";
 import AdminNotifications from "@/components/admin/AdminNotifications";
 import AdminServers from "@/components/admin/AdminServers";
 import AdminMediaSources from "@/components/admin/AdminMediaSources";
+import AdminPayments from "@/components/admin/AdminPayments";
+import AdminAffiliates from "@/components/admin/AdminAffiliates";
+import AdminPaymentSettings from "@/components/admin/AdminPaymentSettings";
 
-type Tab = "settings" | "users" | "content" | "servers" | "media" | "ads" | "notifications";
+type Tab = "settings" | "users" | "content" | "servers" | "media" | "ads" | "notifications" | "payments" | "affiliates" | "payment-settings";
 
 const tabs: { id: Tab; label: string; icon: any }[] = [
   { id: "settings", label: "Settings", icon: Settings },
+  { id: "payment-settings", label: "Payment Config", icon: CreditCard },
+  { id: "payments", label: "Payments", icon: DollarSign },
+  { id: "affiliates", label: "Affiliates", icon: UserCheck },
   { id: "servers", label: "Servers", icon: Server },
   { id: "media", label: "Media Sources", icon: Database },
   { id: "content", label: "Content", icon: Film },

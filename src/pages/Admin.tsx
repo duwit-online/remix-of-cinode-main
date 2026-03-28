@@ -77,6 +77,9 @@ const Admin = () => {
         </div>
 
         {activeTab === "settings" && <AdminSettings />}
+        {activeTab === "payment-settings" && <AdminPaymentSettings />}
+        {activeTab === "payments" && <AdminPayments />}
+        {activeTab === "affiliates" && <AdminAffiliates />}
         {activeTab === "servers" && <AdminServers />}
         {activeTab === "media" && <AdminMediaSources />}
         {activeTab === "content" && <AdminContent />}

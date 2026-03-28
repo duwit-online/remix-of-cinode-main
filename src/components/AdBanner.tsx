@@ -25,7 +25,7 @@ const AdBanner = ({ placement, className = "" }: AdBannerProps) => {
     }
   }, [ad]);
 
-  if (!ad) return null;
+  if (!ad || isPremium) return null;
 
   const handleClick = () => {
     supabase.from("ads").update({ clicks: (ad.clicks || 0) + 1 } as any).eq("id", ad.id).then(() => {});

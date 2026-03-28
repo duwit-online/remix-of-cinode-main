@@ -33,6 +33,19 @@ const Auth = () => {
       if (error) {
         setError(error.message);
       } else {
+        // Save referral if provided
+        if (referralCode.trim()) {
+          try {
+            const { supabase } = await import("@/integrations/supabase/client");
+            const { data: aff } = await supabase.from("affiliates").select("id").eq("referral_code", referralCode.trim().toUpperCase()).eq("is_active", true).maybeSingle();
+            if (aff) {
+              const { data: { user: newUser } } = await supabase.auth.getUser();
+              if (newUser) {
+                await supabase.from("referrals").insert({ affiliate_id: aff.id, referred_user_id: newUser.id });
+              }
+            }
+          } catch {}
+        }
         navigate("/");
       }
     }

@@ -47,7 +47,7 @@ const Auth = () => {
             }
           } catch {}
         }
-        navigate("/");
+        navigate("/app");
       }
     }
     setLoading(false);

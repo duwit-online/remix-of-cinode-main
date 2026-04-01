@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const STORAGE_KEY = "cinode_playback_progress";
 
@@ -25,7 +27,7 @@ function loadProgress(): ProgressMap {
   }
 }
 
-function saveProgress(map: ProgressMap) {
+function saveProgressLocal(map: ProgressMap) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
 }
 
@@ -38,48 +40,92 @@ export function usePlaybackProgress(
   const key = getProgressKey(mediaType, tmdbId, season, episode);
   const [savedTime, setSavedTime] = useState<number>(0);
   const lastSave = useRef(0);
+  const { user } = useAuth();
 
+  // Load progress - check DB first for logged in users, then localStorage
   useEffect(() => {
-    const map = loadProgress();
-    const entry = map[key];
-    if (entry && entry.currentTime > 10) {
-      // Only resume if more than 10s in and not near the end
-      const ratio = entry.duration > 0 ? entry.currentTime / entry.duration : 0;
-      if (ratio < 0.95) {
-        setSavedTime(entry.currentTime);
-      } else {
-        setSavedTime(0);
+    let cancelled = false;
+
+    const load = async () => {
+      // Try DB first if logged in
+      if (user) {
+        try {
+          const { data } = await supabase
+            .from("app_settings")
+            .select("value")
+            .eq("key", `progress_${user.id}_${key}`)
+            .maybeSingle();
+          if (!cancelled && data?.value) {
+            const entry = data.value as any;
+            if (entry.currentTime > 10) {
+              const ratio = entry.duration > 0 ? entry.currentTime / entry.duration : 0;
+              if (ratio < 0.95) {
+                setSavedTime(entry.currentTime);
+                return;
+              }
+            }
+          }
+        } catch {}
       }
-    } else {
-      setSavedTime(0);
-    }
-  }, [key]);
+
+      // Fallback to localStorage
+      if (!cancelled) {
+        const map = loadProgress();
+        const entry = map[key];
+        if (entry && entry.currentTime > 10) {
+          const ratio = entry.duration > 0 ? entry.currentTime / entry.duration : 0;
+          if (ratio < 0.95) {
+            setSavedTime(entry.currentTime);
+          } else {
+            setSavedTime(0);
+          }
+        } else {
+          setSavedTime(0);
+        }
+      }
+    };
+
+    load();
+    return () => { cancelled = true; };
+  }, [key, user]);
 
   const updateProgress = useCallback(
     (currentTime: number, duration: number) => {
       const now = Date.now();
-      // Throttle saves to every 5 seconds
       if (now - lastSave.current < 5000) return;
       lastSave.current = now;
+
+      // Save to localStorage
       const map = loadProgress();
       map[key] = { currentTime, duration, updatedAt: now };
-      // Keep only last 100 entries
       const keys = Object.keys(map);
       if (keys.length > 100) {
         const sorted = keys.sort((a, b) => (map[a].updatedAt || 0) - (map[b].updatedAt || 0));
         sorted.slice(0, keys.length - 100).forEach((k) => delete map[k]);
       }
-      saveProgress(map);
+      saveProgressLocal(map);
+
+      // Also save to DB if logged in
+      if (user) {
+        supabase.from("app_settings").upsert({
+          key: `progress_${user.id}_${key}`,
+          value: { currentTime, duration, updatedAt: now } as any,
+          updated_by: user.id,
+        }, { onConflict: "key" }).then(() => {});
+      }
     },
-    [key]
+    [key, user]
   );
 
   const clearProgress = useCallback(() => {
     const map = loadProgress();
     delete map[key];
-    saveProgress(map);
+    saveProgressLocal(map);
     setSavedTime(0);
-  }, [key]);
+    if (user) {
+      supabase.from("app_settings").delete().eq("key", `progress_${user.id}_${key}`).then(() => {});
+    }
+  }, [key, user]);
 
   return { savedTime, updateProgress, clearProgress };
 }

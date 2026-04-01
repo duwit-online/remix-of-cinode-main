@@ -1,8 +1,8 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Maximize2, Bookmark, BookmarkCheck, AlertTriangle, Download, CheckCircle2, PictureInPicture2 } from "lucide-react";
+import { ArrowLeft, Maximize2, Bookmark, BookmarkCheck, AlertTriangle, Download, CheckCircle2, PictureInPicture2, Star, Calendar, Clock, Users } from "lucide-react";
 import { motion } from "framer-motion";
-import { useMovieDetail, useTVDetail, useSeasonDetail, useSimilar } from "@/hooks/useTMDB";
+import { useMovieDetail, useTVDetail, useSeasonDetail, useSimilar, useCredits } from "@/hooks/useTMDB";
 import { embedProviders, getImageUrl, getTitle, getTVExternalIds } from "@/lib/tmdb";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -45,11 +45,11 @@ const Watch = () => {
 
   const { data: seasonData } = useSeasonDetail(mediaType === "tv" ? tmdbId : 0, season);
   const { data: similar } = useSimilar(mediaType, tmdbId);
+  const { data: credits } = useCredits(mediaType, tmdbId);
 
   const isInWatchlist = useIsInWatchlist(tmdbId, mediaType);
   const toggleWatchlist = useToggleWatchlist();
 
-  // Telegram Bridge - FIRST fallback
   const { data: bridgeData, isLoading: bridgeLoading } = useTelegramBridge(
     tmdbId, mediaType,
     mediaType === "tv" ? season : undefined,
@@ -85,14 +85,12 @@ const Watch = () => {
     ? (movieDetail as any)?.imdb_id
     : tvExternalIds?.imdb_id;
 
-  // Playback progress tracking
   const { savedTime, updateProgress, clearProgress } = usePlaybackProgress(
     mediaType, tmdbId,
     mediaType === "tv" ? season : undefined,
     mediaType === "tv" ? episode : undefined
   );
 
-  // Determine raw stream URL for download
   const rawStreamUrl = useMemo(() => {
     if (bridgeData?.stream_url) return bridgeData.stream_url;
     if (jellyfinData?.stream_url && !videoError) return jellyfinData.stream_url;
@@ -100,9 +98,16 @@ const Watch = () => {
     return "";
   }, [bridgeData, jellyfinData, videoError, override]);
 
-  const isDirectVideo = /\.(mp4|mkv|webm|m3u8)(\?|$)/i.test(rawStreamUrl);
+  // Check if URL is a direct video (more permissive - any non-embed URL with video-like patterns)
+  const isDirectVideo = useMemo(() => {
+    if (!rawStreamUrl) return false;
+    // Check file extensions
+    if (/\.(mp4|mkv|webm|m3u8|avi|mov|flv|wmv|ts)(\?|$)/i.test(rawStreamUrl)) return true;
+    // Check for stream/play patterns (like http://host:port/stream/... or /play?id=...)
+    if (/\/(stream|play|video|download)\b/i.test(rawStreamUrl)) return true;
+    return false;
+  }, [rawStreamUrl]);
 
-  // Offline download
   const { isDownloaded, isDownloading, progress: dlProgress, offlineUrl, download, removeDownload } = useOfflineDownload(
     rawStreamUrl,
     mediaType, tmdbId,
@@ -112,17 +117,11 @@ const Watch = () => {
     mediaType === "tv" ? episode : undefined
   );
 
-  // Source fallback chain: Offline > Telegram Bridge > Jellyfin > DB Override > Embeds
   const { activeSource, streamUrl } = useMemo((): { activeSource: PlayerSource; streamUrl: string } => {
-    // 0. Offline cached video
     if (offlineUrl) return { activeSource: "offline", streamUrl: offlineUrl };
-    // 1. Telegram Bridge (FIRST live source)
     if (bridgeData?.stream_url && !bridgeError) return { activeSource: "telegram_bridge", streamUrl: bridgeData.stream_url };
-    // 2. Jellyfin
     if (jellyfinData?.stream_url && !videoError) return { activeSource: "jellyfin", streamUrl: jellyfinData.stream_url };
-    // 3. DB override
     if ((override as any)?.custom_url) return { activeSource: "override", streamUrl: (override as any).custom_url };
-    // 4. Embed providers
     if (embedIndex < embedProviders.length) {
       const provider = embedProviders[embedIndex];
       const url = provider.getUrl(mediaType, imdbId || "", tmdbId, mediaType === "tv" ? season : undefined, mediaType === "tv" ? episode : undefined);
@@ -135,7 +134,6 @@ const Watch = () => {
     if (embedIndex < embedProviders.length - 1) setEmbedIndex(prev => prev + 1);
   }, [embedIndex]);
 
-  // Resume + volume setup when video element is ready
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid) return;
@@ -167,7 +165,6 @@ const Watch = () => {
     };
   }, [savedTime, updateProgress, clearProgress, activeSource, streamUrl]);
 
-  // Reset resume flag on source change
   useEffect(() => { hasResumed.current = false; }, [season, episode, tmdbId]);
 
   const handleToggleWatchlist = () => {
@@ -184,11 +181,9 @@ const Watch = () => {
   };
 
   const handleVideoError = () => {
-    // If telegram bridge stream failed, mark it and fall through
-    if (activeSource === "telegram_bridge") {
-      setBridgeError(true);
-      return;
-    }
+    if (activeSource === "telegram_bridge") { setBridgeError(true); return; }
+    if (activeSource === "jellyfin" || activeSource === "override") { setVideoError(true); setEmbedIndex(0); return; }
+    // For override that failed as native, try as iframe
     setVideoError(true);
     setEmbedIndex(0);
   };
@@ -197,12 +192,9 @@ const Watch = () => {
     const vid = videoRef.current;
     if (!vid) return;
     try {
-      if (document.pictureInPictureElement) {
-        await document.exitPictureInPicture();
-      } else {
-        await vid.requestPictureInPicture();
-      }
-    } catch (e) {
+      if (document.pictureInPictureElement) await document.exitPictureInPicture();
+      else await vid.requestPictureInPicture();
+    } catch {
       toast({ title: "PiP unavailable", description: "Picture-in-Picture is not supported in this browser." });
     }
   };
@@ -217,6 +209,10 @@ const Watch = () => {
 
   const isNativeVideo = activeSource === "offline" || activeSource === "jellyfin" || activeSource === "telegram_bridge" || (activeSource === "override" && isDirectVideo);
   const isSourceLoading = bridgeLoading || jellyfinLoading;
+
+  // Cast info
+  const cast = credits?.cast?.slice(0, 10) || [];
+  const director = credits?.crew?.find((c: any) => c.job === "Director");
 
   const renderPlayer = () => {
     if (!adDone) return <PreRollAd onComplete={() => setAdDone(true)} />;
@@ -259,9 +255,7 @@ const Watch = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
-      {/* Sticky top bar + player container */}
       <div className="sticky top-0 z-40">
-        {/* Top bar */}
         <div className="glass px-4 py-3 flex items-center gap-2 z-50">
           <button onClick={() => navigate(-1)} className="p-2 rounded-full hover:bg-secondary/50 transition-colors">
             <ArrowLeft size={20} />
@@ -270,7 +264,6 @@ const Watch = () => {
             {detail ? getTitle(detail as any) : "Loading..."}
           </h1>
 
-          {/* Download button */}
           {rawStreamUrl && (
             isDownloading ? (
               <div className="flex items-center gap-1.5 px-2">
@@ -292,7 +285,6 @@ const Watch = () => {
             <span className="text-[10px] text-primary font-medium px-2">Offline</span>
           )}
 
-          {/* PiP button */}
           {isNativeVideo && (
             <button onClick={togglePiP} className="p-2 rounded-full hover:bg-secondary/50 transition-colors" title="Picture-in-Picture">
               <PictureInPicture2 size={18} className="text-muted-foreground" />
@@ -310,13 +302,11 @@ const Watch = () => {
           </button>
         </div>
 
-        {/* Sticky player */}
         <div className={`relative bg-black ${theaterMode ? "w-full aspect-video" : "max-w-5xl mx-auto aspect-video"}`}>
           {renderPlayer()}
         </div>
       </div>
 
-      {/* Details - scrollable below sticky player */}
       <div className="max-w-5xl mx-auto px-4 mt-4 space-y-4">
         <AdBanner placement="watch_page" className="mb-4" />
 
@@ -324,7 +314,7 @@ const Watch = () => {
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted-foreground">Season</label>
-              <select value={season} onChange={(e) => { setSeason(Number(e.target.value)); setEpisode(1); setVideoError(false); setBridgeError(false); setEmbedIndex(0); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
+              <select value={season} onChange={(e) => { setSeason(Number(e.target.value)); setEpisode(1); setVideoError(false); setBridgeError(false); setEmbedIndex(0); hasResumed.current = false; }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
                 {(detail.seasons || []).filter((s) => s.season_number > 0).map((s) => (
                   <option key={s.season_number} value={s.season_number}>{s.name}</option>
                 ))}
@@ -332,7 +322,7 @@ const Watch = () => {
             </div>
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted-foreground">Episode</label>
-              <select value={episode} onChange={(e) => { setEpisode(Number(e.target.value)); setVideoError(false); setBridgeError(false); setEmbedIndex(0); }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
+              <select value={episode} onChange={(e) => { setEpisode(Number(e.target.value)); setVideoError(false); setBridgeError(false); setEmbedIndex(0); hasResumed.current = false; }} className="bg-secondary/60 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50">
                 {seasonData?.episodes?.map((ep) => (
                   <option key={ep.episode_number} value={ep.episode_number}>Ep {ep.episode_number}: {ep.name}</option>
                 )) || (
@@ -345,6 +335,7 @@ const Watch = () => {
           </div>
         )}
 
+        {/* Enhanced Detail Section */}
         {detail && (
           <div className="glass rounded-2xl p-5 border border-border/30">
             <div className="flex gap-4">
@@ -352,13 +343,53 @@ const Watch = () => {
               <div className="flex-1 min-w-0">
                 <h2 className="font-display font-bold text-xl mb-1">{getTitle(detail as any)}</h2>
                 {detail.tagline && <p className="text-primary text-xs italic mb-2">{detail.tagline}</p>}
+                <div className="flex flex-wrap items-center gap-3 mb-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1 text-primary font-semibold">
+                    <Star size={12} className="fill-primary" /> {(detail.vote_average ?? 0).toFixed(1)}
+                  </span>
+                  {(detail as any).release_date && (
+                    <span className="flex items-center gap-1"><Calendar size={12} /> {(detail as any).release_date}</span>
+                  )}
+                  {(detail as any).first_air_date && (
+                    <span className="flex items-center gap-1"><Calendar size={12} /> {(detail as any).first_air_date}</span>
+                  )}
+                  {detail.runtime && (
+                    <span className="flex items-center gap-1"><Clock size={12} /> {detail.runtime} min</span>
+                  )}
+                  {detail.number_of_seasons && (
+                    <span>{detail.number_of_seasons} Seasons</span>
+                  )}
+                  {detail.status && <span className="px-2 py-0.5 rounded-md bg-secondary/60 border border-border/30">{detail.status}</span>}
+                </div>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {detail.genres?.map((g) => (
                     <span key={g.id} className="px-2 py-0.5 rounded-md bg-secondary/60 text-xs border border-border/30">{g.name}</span>
                   ))}
                 </div>
-                <p className="text-muted-foreground text-sm leading-relaxed line-clamp-3">{detail.overview}</p>
+                <p className="text-muted-foreground text-sm leading-relaxed">{detail.overview}</p>
+                {director && <p className="text-xs text-muted-foreground mt-2">Director: <span className="text-foreground font-medium">{director.name}</span></p>}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cast */}
+        {cast.length > 0 && (
+          <div>
+            <h3 className="font-display font-bold text-base mb-3">Cast</h3>
+            <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+              {cast.map((person: any) => (
+                <div key={person.id} className="flex-shrink-0 w-20 text-center">
+                  <img
+                    src={person.profile_path ? getImageUrl(person.profile_path, "w185") : "/placeholder.svg"}
+                    alt={person.name}
+                    className="w-16 h-16 rounded-full object-cover mx-auto mb-1"
+                    loading="lazy"
+                  />
+                  <p className="text-[10px] font-medium line-clamp-1">{person.name}</p>
+                  <p className="text-[9px] text-muted-foreground line-clamp-1">{person.character}</p>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -368,7 +399,7 @@ const Watch = () => {
             <h3 className="font-display font-bold text-base mb-3">Episodes</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {seasonData.episodes.map((ep) => (
-                <button key={ep.episode_number} onClick={() => { setEpisode(ep.episode_number); setVideoError(false); setBridgeError(false); setEmbedIndex(0); }}
+                <button key={ep.episode_number} onClick={() => { setEpisode(ep.episode_number); setVideoError(false); setBridgeError(false); setEmbedIndex(0); hasResumed.current = false; }}
                   className={`text-left p-3 rounded-xl transition-all ${episode === ep.episode_number ? "bg-primary/10 border border-primary/30" : "bg-secondary/30 border border-border/20 hover:bg-secondary/50"}`}
                 >
                   <div className="flex gap-3">

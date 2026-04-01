@@ -72,3 +72,10 @@ export const useMovieGenres = () =>
 
 export const useTVGenres = () =>
   useQuery({ queryKey: ["tv-genres"], queryFn: tmdb.getTVGenres });
+
+export const useCredits = (mediaType: "movie" | "tv", id: number) =>
+  useQuery({
+    queryKey: ["credits", mediaType, id],
+    queryFn: () => tmdb.getCredits(mediaType, id),
+    enabled: !!id,
+  });

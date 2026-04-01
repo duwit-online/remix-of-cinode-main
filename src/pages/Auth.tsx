@@ -27,7 +27,7 @@ const Auth = () => {
       if (error) {
         setError(error.message);
       } else {
-        navigate("/");
+        navigate("/app");
       }
     } else {
       const { error } = await signUp(email, password, name);

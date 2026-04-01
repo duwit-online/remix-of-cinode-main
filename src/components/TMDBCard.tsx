@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { Star, Play } from "lucide-react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { TMDBMovie, getImageUrl, getTitle, getYear, getMediaType } from "@/lib/tmdb";
+import { useAuth } from "@/contexts/AuthContext";
+import AuthGateModal from "./AuthGateModal";
 
 interface TMDBCardProps {
   item: TMDBMovie;
@@ -11,9 +14,15 @@ interface TMDBCardProps {
 
 const TMDBCard = ({ item, variant = "default", index = 0 }: TMDBCardProps) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [showAuth, setShowAuth] = useState(false);
   const mediaType = getMediaType(item);
 
   const handleClick = () => {
+    if (!user) {
+      setShowAuth(true);
+      return;
+    }
     navigate(`/watch/${mediaType}/${item.id}`);
   };
 
@@ -30,41 +39,41 @@ const TMDBCard = ({ item, variant = "default", index = 0 }: TMDBCardProps) => {
     : getImageUrl(item.poster_path);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 15 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.3, delay: index * 0.05 }}
-      className={`${baseClasses} ${variantClasses[variant]}`}
-      onClick={handleClick}
-    >
-      <img
-        src={image}
-        alt={getTitle(item)}
-        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-        loading="lazy"
-      />
-
-      <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-      <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-background/90 to-transparent" />
-
-      <div className="absolute bottom-0 left-0 right-0 p-3">
-        <h3 className="font-display font-bold text-xs mb-0.5 line-clamp-1">{getTitle(item)}</h3>
-        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-          <span className="flex items-center gap-0.5 text-primary">
-            <Star size={8} className="fill-primary" />
-            {(item.vote_average ?? 0).toFixed(1)}
-          </span>
-          <span>{getYear(item)}</span>
+    <>
+      <motion.div
+        initial={{ opacity: 0, y: 15 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.3, delay: index * 0.05 }}
+        className={`${baseClasses} ${variantClasses[variant]}`}
+        onClick={handleClick}
+      >
+        <img
+          src={image}
+          alt={getTitle(item)}
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+          loading="lazy"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-background/90 to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 p-3">
+          <h3 className="font-display font-bold text-xs mb-0.5 line-clamp-1">{getTitle(item)}</h3>
+          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-0.5 text-primary">
+              <Star size={8} className="fill-primary" />
+              {(item.vote_average ?? 0).toFixed(1)}
+            </span>
+            <span>{getYear(item)}</span>
+          </div>
         </div>
-      </div>
-
-      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-        <div className="w-10 h-10 rounded-full bg-primary/90 flex items-center justify-center glow-primary">
-          <Play size={16} className="fill-primary-foreground text-primary-foreground ml-0.5" />
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          <div className="w-10 h-10 rounded-full bg-primary/90 flex items-center justify-center glow-primary">
+            <Play size={16} className="fill-primary-foreground text-primary-foreground ml-0.5" />
+          </div>
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+      <AuthGateModal open={showAuth} onClose={() => setShowAuth(false)} />
+    </>
   );
 };
 

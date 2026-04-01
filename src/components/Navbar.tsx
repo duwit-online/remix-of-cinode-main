@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Search, User, Bookmark } from "lucide-react";
+import { Search, User, Bookmark, Crown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useLocation } from "react-router-dom";
 import NotificationBell from "@/components/NotificationBell";
+import { useIsPremium } from "@/hooks/useSubscription";
 
 const navItems = [
-  { label: "Home", path: "/" },
+  { label: "Home", path: "/app" },
   { label: "Movies", path: "/movies" },
   { label: "TV Shows", path: "/tv" },
   { label: "Watchlist", path: "/watchlist" },
@@ -16,6 +17,7 @@ const Navbar = () => {
   const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { isPremium } = useIsPremium();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 glass border-b-0 hidden md:block">
@@ -23,7 +25,7 @@ const Navbar = () => {
         <div className="flex items-center gap-8">
           <h1
             className="text-xl font-display font-black tracking-tight text-gradient cursor-pointer"
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/app")}
           >
             CINODE
           </h1>
@@ -48,6 +50,11 @@ const Navbar = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {!isPremium && (
+            <button onClick={() => navigate("/premium")} className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-yellow-500/20 text-yellow-400 text-xs font-semibold hover:bg-yellow-500/30 transition-colors">
+              <Crown size={12} /> Upgrade
+            </button>
+          )}
           <AnimatePresence>
             {searchOpen && (
               <motion.input

@@ -2,7 +2,7 @@ import { Home, Search, Film, Tv, User, Download } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const tabs = [
-  { icon: Home, label: "Home", path: "/" },
+  { icon: Home, label: "Home", path: "/app" },
   { icon: Search, label: "Search", path: "/search" },
   { icon: Film, label: "Movies", path: "/movies" },
   { icon: Tv, label: "TV", path: "/tv" },
@@ -24,9 +24,7 @@ const MobileBottomNav = () => {
               key={path}
               onClick={() => navigate(path)}
               className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-colors min-w-0 ${
-                active
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
+                active ? "text-primary" : "text-muted-foreground hover:text-foreground"
               }`}
             >
               <Icon size={20} strokeWidth={active ? 2.5 : 1.5} />

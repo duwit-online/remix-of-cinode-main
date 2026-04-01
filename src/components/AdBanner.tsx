@@ -1,5 +1,5 @@
 import { useActiveAds } from "@/hooks/useAds";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIsPremium } from "@/hooks/useSubscription";
 
@@ -13,8 +13,10 @@ const AdBanner = ({ placement, className = "" }: AdBannerProps) => {
   const { isPremium } = useIsPremium();
   const tracked = useRef<Set<string>>(new Set());
 
-  // Filter to only banner/inline types for display ads
-  const displayAds = ads?.filter((a: any) => a.ad_type === "banner" || a.ad_type === "inline") || [];
+  // Filter to banner/inline types or adsterra type
+  const displayAds = ads?.filter((a: any) => 
+    a.ad_type === "banner" || a.ad_type === "inline" || a.ad_type === "adsterra"
+  ) || [];
   const ad = displayAds[0];
 
   // Track impression
@@ -30,6 +32,16 @@ const AdBanner = ({ placement, className = "" }: AdBannerProps) => {
   const handleClick = () => {
     supabase.from("ads").update({ clicks: (ad.clicks || 0) + 1 } as any).eq("id", ad.id).then(() => {});
   };
+
+  // Adsterra: render the HTML snippet directly
+  if (ad.ad_type === "adsterra" && ad.content_html) {
+    return (
+      <div
+        className={`rounded-xl overflow-hidden ${className}`}
+        dangerouslySetInnerHTML={{ __html: ad.content_html }}
+      />
+    );
+  }
 
   if (ad.content_html) {
     return (

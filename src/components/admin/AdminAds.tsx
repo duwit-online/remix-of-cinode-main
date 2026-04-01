@@ -5,7 +5,7 @@ import { Plus, Trash2, Megaphone, ToggleLeft, ToggleRight, Copy, Edit2, X, Check
 import { motion } from "framer-motion";
 import { toast } from "@/hooks/use-toast";
 
-const adTypes = ["banner", "inline", "pre_roll", "mid_roll", "popup"];
+const adTypes = ["banner", "inline", "pre_roll", "mid_roll", "popup", "adsterra"];
 const placements = ["homepage", "watch_page", "search", "movies", "tv", "global"];
 
 const AdminAds = () => {
@@ -70,13 +70,9 @@ const AdminAds = () => {
   const startEdit = (ad: any) => {
     setEditingAd(ad);
     setForm({
-      name: ad.name,
-      ad_type: ad.ad_type,
-      placement: ad.placement,
-      image_url: ad.image_url || "",
-      video_url: ad.video_url || "",
-      link_url: ad.link_url || "",
-      content_html: ad.content_html || "",
+      name: ad.name, ad_type: ad.ad_type, placement: ad.placement,
+      image_url: ad.image_url || "", video_url: ad.video_url || "",
+      link_url: ad.link_url || "", content_html: ad.content_html || "",
       priority: String(ad.priority),
       start_date: ad.start_date ? ad.start_date.slice(0, 16) : "",
       end_date: ad.end_date ? ad.end_date.slice(0, 16) : "",
@@ -85,24 +81,15 @@ const AdminAds = () => {
   };
 
   const cloneAd = async (ad: any) => {
-    const { error } = await supabase.from("ads").insert({
-      name: `${ad.name} (Copy)`,
-      ad_type: ad.ad_type,
-      placement: ad.placement,
-      image_url: ad.image_url,
-      video_url: ad.video_url,
-      link_url: ad.link_url,
-      content_html: ad.content_html,
-      priority: ad.priority,
-      start_date: ad.start_date,
-      end_date: ad.end_date,
-      created_by: user?.id,
-      is_active: false,
+    await supabase.from("ads").insert({
+      name: `${ad.name} (Copy)`, ad_type: ad.ad_type, placement: ad.placement,
+      image_url: ad.image_url, video_url: ad.video_url, link_url: ad.link_url,
+      content_html: ad.content_html, priority: ad.priority,
+      start_date: ad.start_date, end_date: ad.end_date,
+      created_by: user?.id, is_active: false,
     } as any);
-    if (!error) {
-      toast({ title: "Ad cloned" });
-      fetchAds();
-    }
+    toast({ title: "Ad cloned" });
+    fetchAds();
   };
 
   const toggleActive = async (ad: any) => {
@@ -118,7 +105,7 @@ const AdminAds = () => {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <p className="text-sm text-muted-foreground">Manage banners, inline, pre-roll, mid-roll, and popup ads.</p>
+        <p className="text-sm text-muted-foreground">Manage banners, inline, pre-roll, mid-roll, popup, and Adsterra ads.</p>
         <button onClick={() => { resetForm(); setShowForm(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium">
           <Plus size={16} /> Add Ad
         </button>
@@ -127,6 +114,13 @@ const AdminAds = () => {
       {showForm && (
         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="glass rounded-2xl p-5 border border-primary/30 space-y-3">
           <h3 className="font-display font-bold text-sm">{editingAd ? "Edit Ad" : "New Ad"}</h3>
+
+          {form.ad_type === "adsterra" && (
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 text-xs text-blue-300">
+              💡 Paste your Adsterra code snippet in the "Custom HTML" field below. It will render exactly as provided.
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Name *</label>
@@ -135,7 +129,7 @@ const AdminAds = () => {
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Type</label>
               <select value={form.ad_type} onChange={(e) => setForm({ ...form, ad_type: e.target.value })} className="w-full bg-secondary/50 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none">
-                {adTypes.map((t) => <option key={t} value={t}>{t.replace("_", " ").toUpperCase()}</option>)}
+                {adTypes.map((t) => <option key={t} value={t}>{t === "adsterra" ? "ADSTERRA" : t.replace("_", " ").toUpperCase()}</option>)}
               </select>
             </div>
             <div>
@@ -156,21 +150,27 @@ const AdminAds = () => {
               <label className="text-xs text-muted-foreground mb-1 block">End Date</label>
               <input type="datetime-local" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} className="w-full bg-secondary/50 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50" />
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Image URL</label>
-              <input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://..." className="w-full bg-secondary/50 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Video URL</label>
-              <input value={form.video_url} onChange={(e) => setForm({ ...form, video_url: e.target.value })} placeholder="https://..." className="w-full bg-secondary/50 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Link URL</label>
-              <input value={form.link_url} onChange={(e) => setForm({ ...form, link_url: e.target.value })} placeholder="https://..." className="w-full bg-secondary/50 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50" />
-            </div>
+            {form.ad_type !== "adsterra" && (
+              <>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Image URL</label>
+                  <input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://..." className="w-full bg-secondary/50 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Video URL</label>
+                  <input value={form.video_url} onChange={(e) => setForm({ ...form, video_url: e.target.value })} placeholder="https://..." className="w-full bg-secondary/50 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Link URL</label>
+                  <input value={form.link_url} onChange={(e) => setForm({ ...form, link_url: e.target.value })} placeholder="https://..." className="w-full bg-secondary/50 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50" />
+                </div>
+              </>
+            )}
             <div className="sm:col-span-2">
-              <label className="text-xs text-muted-foreground mb-1 block">Custom HTML</label>
-              <textarea value={form.content_html} onChange={(e) => setForm({ ...form, content_html: e.target.value })} placeholder="<div>...</div>" rows={3} className="w-full bg-secondary/50 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50 resize-none" />
+              <label className="text-xs text-muted-foreground mb-1 block">
+                {form.ad_type === "adsterra" ? "Adsterra Code Snippet *" : "Custom HTML"}
+              </label>
+              <textarea value={form.content_html} onChange={(e) => setForm({ ...form, content_html: e.target.value })} placeholder={form.ad_type === "adsterra" ? "<script>...</script>" : "<div>...</div>"} rows={4} className="w-full bg-secondary/50 border border-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary/50 resize-none font-mono" />
             </div>
           </div>
           <div className="flex gap-2 justify-end">

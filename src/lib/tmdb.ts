@@ -139,6 +139,10 @@ export const getSimilarMovies = (id: number) =>
 export const getSimilarTV = (id: number) =>
   tmdbFetch<TMDBResponse>(`/tv/${id}/similar`);
 
+// Credits (cast & crew)
+export const getCredits = (mediaType: "movie" | "tv", id: number) =>
+  tmdbFetch<{ cast: any[]; crew: any[] }>(`/${mediaType}/${id}/credits`);
+
 // Helpers
 export const getTitle = (item: TMDBMovie) => item.title || item.name || "Untitled";
 export const getYear = (item: TMDBMovie) => {

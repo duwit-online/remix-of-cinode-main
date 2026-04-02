@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Shield, Settings, Users, Film, Megaphone, Bell, ArrowLeft, Server, Database, DollarSign, UserCheck, CreditCard } from "lucide-react";
+import { Shield, Settings, Users, Film, Megaphone, Bell, ArrowLeft, Server, Database, DollarSign, UserCheck, CreditCard, Play } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import AdminSettings from "@/components/admin/AdminSettings";
 import AdminUsers from "@/components/admin/AdminUsers";
@@ -13,16 +13,18 @@ import AdminMediaSources from "@/components/admin/AdminMediaSources";
 import AdminPayments from "@/components/admin/AdminPayments";
 import AdminAffiliates from "@/components/admin/AdminAffiliates";
 import AdminPaymentSettings from "@/components/admin/AdminPaymentSettings";
+import AdminPlaybackSources from "@/components/admin/AdminPlaybackSources";
 
-type Tab = "settings" | "users" | "content" | "servers" | "media" | "ads" | "notifications" | "payments" | "affiliates" | "payment-settings";
+type Tab = "settings" | "users" | "content" | "servers" | "media" | "ads" | "notifications" | "payments" | "affiliates" | "payment-settings" | "playback-sources";
 
 const tabs: { id: Tab; label: string; icon: any }[] = [
   { id: "settings", label: "Settings", icon: Settings },
   { id: "payment-settings", label: "Payment Config", icon: CreditCard },
   { id: "payments", label: "Payments", icon: DollarSign },
   { id: "affiliates", label: "Affiliates", icon: UserCheck },
+  { id: "playback-sources", label: "Sources", icon: Play },
   { id: "servers", label: "Servers", icon: Server },
-  { id: "media", label: "Media Sources", icon: Database },
+  { id: "media", label: "Media", icon: Database },
   { id: "content", label: "Content", icon: Film },
   { id: "users", label: "Users", icon: Users },
   { id: "ads", label: "Ads", icon: Megaphone },
@@ -50,9 +52,7 @@ const Admin = () => {
     <div className="min-h-screen bg-background pt-16 pb-24 md:pb-8 px-4 md:px-8">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-5xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => navigate("/profile")} className="p-2 rounded-full hover:bg-secondary/50">
-            <ArrowLeft size={20} />
-          </button>
+          <button onClick={() => navigate("/profile")} className="p-2 rounded-full hover:bg-secondary/50"><ArrowLeft size={20} /></button>
           <Shield size={24} className="text-primary" />
           <h1 className="font-display font-bold text-2xl">Admin Dashboard</h1>
         </div>
@@ -61,15 +61,7 @@ const Admin = () => {
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
-                }`}
-              >
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab.id ? "bg-primary text-primary-foreground" : "bg-secondary/50 text-muted-foreground hover:bg-secondary"}`}>
                 <Icon size={16} /> {tab.label}
               </button>
             );
@@ -80,6 +72,7 @@ const Admin = () => {
         {activeTab === "payment-settings" && <AdminPaymentSettings />}
         {activeTab === "payments" && <AdminPayments />}
         {activeTab === "affiliates" && <AdminAffiliates />}
+        {activeTab === "playback-sources" && <AdminPlaybackSources />}
         {activeTab === "servers" && <AdminServers />}
         {activeTab === "media" && <AdminMediaSources />}
         {activeTab === "content" && <AdminContent />}

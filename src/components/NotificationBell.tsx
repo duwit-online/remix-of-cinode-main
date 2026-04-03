@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 const NotificationBell = () => {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<any | null>(null);
   const { data: notifications } = useNotifications();
   const unreadCount = useUnreadCount();
   const markAsRead = useMarkAsRead();
@@ -64,21 +65,40 @@ const NotificationBell = () => {
               <p className="p-4 text-xs text-muted-foreground text-center">No notifications</p>
             ) : (
               notifications?.slice(0, 20).map((n: any) => (
-                <div
+                <button
                   key={n.id}
-                  onClick={() => { if (!n.is_read) markAsRead.mutate(n.id); }}
+                  onClick={() => {
+                    if (!n.is_read) markAsRead.mutate(n.id);
+                    setSelectedNotification(n);
+                  }}
                   className={`p-3 border-b border-border/10 cursor-pointer transition-colors ${
                     n.is_read ? "opacity-60" : "hover:bg-secondary/30"
-                  }`}
+                  } w-full text-left`}
                 >
                   <div className="flex items-center gap-2 mb-0.5">
                     {!n.is_read && <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />}
                     <p className="text-xs font-medium">{n.title}</p>
                   </div>
-                  <p className="text-[10px] text-muted-foreground pl-3.5">{n.message}</p>
-                </div>
+                  <p className="text-[10px] text-muted-foreground pl-3.5 line-clamp-2">{n.message}</p>
+                </button>
               ))
             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {selectedNotification && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] bg-black/80 flex items-end sm:items-center justify-center p-4" onClick={() => setSelectedNotification(null)}>
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} className="w-full max-w-md glass rounded-3xl border border-border/30 p-5" onClick={(e) => e.stopPropagation()}>
+              <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground mb-2">{selectedNotification.type}</p>
+              <h3 className="font-display font-bold text-lg mb-2">{selectedNotification.title}</h3>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedNotification.message}</p>
+              <p className="text-[11px] text-muted-foreground mt-4">{new Date(selectedNotification.created_at).toLocaleString()}</p>
+              <button onClick={() => setSelectedNotification(null)} className="mt-5 w-full rounded-2xl bg-primary text-primary-foreground py-3 text-sm font-medium">
+                Close
+              </button>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -4,6 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Check, X, Eye, Clock, DollarSign, Calendar } from "lucide-react";
+import { Calendar as DateCalendar } from "@/components/ui/calendar";
+
+const sameDay = (input: string, date?: Date) => {
+  if (!date) return true;
+  const current = new Date(input);
+  return current.toDateString() === date.toDateString();
+};
 
 const AdminPayments = () => {
   const { user } = useAuth();
@@ -13,35 +20,71 @@ const AdminPayments = () => {
   const [rejectNotes, setRejectNotes] = useState("");
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [showSubManager, setShowSubManager] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 
   const { data: payments } = useQuery({
     queryKey: ["admin-payments", filter],
     queryFn: async () => {
-      let q = supabase.from("payment_submissions").select("*, profiles:user_id(display_name, email)").order("created_at", { ascending: false });
+      let q = supabase.from("payment_submissions").select("*").order("created_at", { ascending: false });
       if (filter !== "all") q = q.eq("status", filter);
-      const { data } = await q;
-      return (data as any[]) || [];
+      const { data: paymentRows, error } = await q;
+      if (error) throw error;
+      const userIds = [...new Set((paymentRows || []).map((row: any) => row.user_id).filter(Boolean))];
+      const { data: profiles } = userIds.length ? await supabase.from("profiles").select("user_id, display_name, email").in("user_id", userIds) : { data: [] };
+      const profilesByUserId = new Map((profiles || []).map((profile: any) => [profile.user_id, profile]));
+      return ((paymentRows as any[]) || []).map((payment: any) => ({
+        ...payment,
+        profile: profilesByUserId.get(payment.user_id) || null,
+      }));
     },
   });
 
   const { data: subscriptions } = useQuery({
     queryKey: ["admin-subscriptions"],
     queryFn: async () => {
-      const { data } = await supabase.from("subscriptions").select("*, profiles:user_id(display_name, email)").order("created_at", { ascending: false });
-      return (data as any[]) || [];
+      const { data: subscriptionRows, error } = await supabase.from("subscriptions").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      const userIds = [...new Set((subscriptionRows || []).map((row: any) => row.user_id).filter(Boolean))];
+      const { data: profiles } = userIds.length ? await supabase.from("profiles").select("user_id, display_name, email").in("user_id", userIds) : { data: [] };
+      const profilesByUserId = new Map((profiles || []).map((profile: any) => [profile.user_id, profile]));
+      return ((subscriptionRows as any[]) || []).map((subscription: any) => ({
+        ...subscription,
+        profile: profilesByUserId.get(subscription.user_id) || null,
+      }));
     },
   });
 
   const approve = async (p: any) => {
     const days = p.plan_type === "yearly" ? 365 : 30;
-    const expires = new Date();
+
+    const { data: existingSub } = await supabase
+      .from("subscriptions")
+      .select("*")
+      .eq("user_id", p.user_id)
+      .order("expires_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const baseDate = existingSub?.expires_at && new Date(existingSub.expires_at) > new Date() ? new Date(existingSub.expires_at) : new Date();
+    const expires = new Date(baseDate);
     expires.setDate(expires.getDate() + days);
 
-    await supabase.from("subscriptions").insert({
-      user_id: p.user_id,
-      plan_type: p.plan_type,
-      expires_at: expires.toISOString(),
-    });
+    if (existingSub) {
+      await supabase.from("subscriptions").update({
+        plan_type: p.plan_type,
+        status: "active",
+        starts_at: existingSub.starts_at || new Date().toISOString(),
+        expires_at: expires.toISOString(),
+      }).eq("id", existingSub.id);
+    } else {
+      await supabase.from("subscriptions").insert({
+        user_id: p.user_id,
+        plan_type: p.plan_type,
+        starts_at: new Date().toISOString(),
+        expires_at: expires.toISOString(),
+        status: "active",
+      });
+    }
 
     await supabase.from("payment_submissions").update({
       status: "approved",
@@ -50,13 +93,21 @@ const AdminPayments = () => {
     }).eq("id", p.id);
 
     if (p.referral_code) {
-      const { data: aff } = await supabase.from("affiliates").select("id").eq("referral_code", p.referral_code).maybeSingle();
-      if (aff) {
-        await supabase.from("affiliate_earnings").insert({
-          affiliate_id: aff.id,
-          payment_submission_id: p.id,
-          amount: 100,
-        });
+      const { data: aff } = await supabase.from("affiliates").select("id, user_id").eq("referral_code", p.referral_code).eq("is_active", true).maybeSingle();
+      if (aff && aff.user_id !== p.user_id) {
+        const { data: existingReferral } = await supabase.from("referrals").select("id").eq("referred_user_id", p.user_id).eq("affiliate_id", aff.id).maybeSingle();
+        if (!existingReferral) {
+          await supabase.from("referrals").insert({ affiliate_id: aff.id, referred_user_id: p.user_id });
+        }
+
+        const { data: existingEarning } = await supabase.from("affiliate_earnings").select("id").eq("payment_submission_id", p.id).maybeSingle();
+        if (!existingEarning) {
+          await supabase.from("affiliate_earnings").insert({
+            affiliate_id: aff.id,
+            payment_submission_id: p.id,
+            amount: 100,
+          });
+        }
       }
     }
 
@@ -95,6 +146,18 @@ const AdminPayments = () => {
   };
 
   const filters = ["all", "pending", "approved", "rejected"] as const;
+  const paymentStats = {
+    pending: payments?.filter((payment: any) => payment.status === "pending").length || 0,
+    approved: payments?.filter((payment: any) => payment.status === "approved").length || 0,
+    rejected: payments?.filter((payment: any) => payment.status === "rejected").length || 0,
+    subscriptions: subscriptions?.filter((subscription: any) => subscription.status === "active").length || 0,
+  };
+
+  const filteredSubscriptions = (subscriptions || []).filter((subscription: any) =>
+    sameDay(subscription.expires_at, selectedDate) || sameDay(subscription.starts_at, selectedDate)
+  );
+
+  const filteredPaymentsByDate = (payments || []).filter((payment: any) => sameDay(payment.created_at, selectedDate));
 
   return (
     <div className="space-y-4">
@@ -103,6 +166,20 @@ const AdminPayments = () => {
         <button onClick={() => setShowSubManager(!showSubManager)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-secondary/50 text-xs font-medium">
           <Calendar size={14} /> {showSubManager ? "Show Payments" : "Subscriptions"}
         </button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: "Pending", value: paymentStats.pending },
+          { label: "Approved", value: paymentStats.approved },
+          { label: "Rejected", value: paymentStats.rejected },
+          { label: "Active Subs", value: paymentStats.subscriptions },
+        ].map((item) => (
+          <div key={item.label} className="glass rounded-xl border border-border/30 p-4">
+            <p className="text-xs text-muted-foreground">{item.label}</p>
+            <p className="text-2xl font-display font-black">{item.value}</p>
+          </div>
+        ))}
       </div>
 
       {!showSubManager ? (
@@ -118,8 +195,8 @@ const AdminPayments = () => {
               <div key={p.id} className="glass rounded-xl p-4 border border-border/30">
                 <div className="flex items-start justify-between mb-2">
                   <div>
-                    <p className="text-sm font-medium">{p.profiles?.display_name || "User"}</p>
-                    <p className="text-xs text-muted-foreground">{p.profiles?.email}</p>
+                    <p className="text-sm font-medium">{p.profile?.display_name || "User"}</p>
+                    <p className="text-xs text-muted-foreground">{p.profile?.email || "No email"}</p>
                   </div>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.status === "pending" ? "bg-yellow-500/20 text-yellow-400" : p.status === "approved" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>{p.status}</span>
                 </div>
@@ -156,43 +233,73 @@ const AdminPayments = () => {
               <p className="text-center text-muted-foreground text-sm py-8">No payments found</p>
             )}
           </div>
+
+          <div className="glass rounded-2xl border border-border/30 p-4 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold">Payments Calendar</h3>
+              <p className="text-xs text-muted-foreground">Pick a date to inspect submissions from that day.</p>
+            </div>
+            <DateCalendar mode="single" selected={selectedDate} onSelect={setSelectedDate} className="rounded-xl border border-border/20 bg-secondary/20 p-3" />
+            <div className="space-y-2">
+              {filteredPaymentsByDate.length > 0 ? filteredPaymentsByDate.map((payment: any) => (
+                <div key={`calendar-${payment.id}`} className="rounded-xl bg-secondary/30 p-3 text-xs">
+                  <p className="font-medium">{payment.profile?.display_name || payment.profile?.email || "User"}</p>
+                  <p className="text-muted-foreground">{payment.plan_type} · ₦{Number(payment.amount).toLocaleString()} · {payment.status}</p>
+                </div>
+              )) : <p className="text-xs text-muted-foreground">No payment submissions for the selected day.</p>}
+            </div>
+          </div>
         </>
       ) : (
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold">Active & Past Subscriptions</h3>
-          {subscriptions?.map((s: any) => {
-            const isExpired = new Date(s.expires_at) < new Date();
-            const isCancelled = s.status === "cancelled";
-            return (
-              <div key={s.id} className={`glass rounded-xl p-4 border ${isCancelled || isExpired ? "border-border/30 opacity-60" : "border-green-500/30"}`}>
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="text-sm font-medium">{s.profiles?.display_name || "User"}</p>
-                    <p className="text-xs text-muted-foreground">{s.profiles?.email}</p>
+        <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+          <div className="glass rounded-2xl border border-border/30 p-4 space-y-4 h-fit">
+            <div>
+              <h3 className="text-sm font-semibold">Subscriptions Calendar</h3>
+              <p className="text-xs text-muted-foreground">See who starts or expires around any chosen date.</p>
+            </div>
+            <DateCalendar mode="single" selected={selectedDate} onSelect={setSelectedDate} className="rounded-xl border border-border/20 bg-secondary/20 p-3" />
+            <div className="rounded-xl bg-secondary/30 p-3 text-xs">
+              <p className="font-medium">Selected day summary</p>
+              <p className="text-muted-foreground mt-1">{filteredSubscriptions.length} subscription event(s)</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold">Active & Past Subscriptions</h3>
+            {filteredSubscriptions.map((s: any) => {
+              const isExpired = new Date(s.expires_at) < new Date();
+              const isCancelled = s.status === "cancelled";
+              return (
+                <div key={s.id} className={`glass rounded-xl p-4 border ${isCancelled || isExpired ? "border-border/30 opacity-60" : "border-green-500/30"}`}>
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <p className="text-sm font-medium">{s.profile?.display_name || "User"}</p>
+                      <p className="text-xs text-muted-foreground">{s.profile?.email || "No email"}</p>
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isCancelled ? "bg-red-500/20 text-red-400" : isExpired ? "bg-yellow-500/20 text-yellow-400" : "bg-green-500/20 text-green-400"}`}>
+                      {isCancelled ? "Cancelled" : isExpired ? "Expired" : "Active"}
+                    </span>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isCancelled ? "bg-red-500/20 text-red-400" : isExpired ? "bg-yellow-500/20 text-yellow-400" : "bg-green-500/20 text-green-400"}`}>
-                    {isCancelled ? "Cancelled" : isExpired ? "Expired" : "Active"}
-                  </span>
+                  <div className="grid grid-cols-2 gap-1 text-xs mb-3">
+                    <div><span className="text-muted-foreground">Plan:</span> {s.plan_type}</div>
+                    <div><span className="text-muted-foreground">Started:</span> {new Date(s.starts_at).toLocaleDateString()}</div>
+                    <div><span className="text-muted-foreground">Expires:</span> {new Date(s.expires_at).toLocaleDateString()}</div>
+                    <div><span className="text-muted-foreground">Status:</span> {s.status}</div>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {!isCancelled && (
+                      <button onClick={() => cancelSubscription(s.id)} className="px-3 py-1 rounded-lg bg-red-500/20 text-red-400 text-xs">Cancel</button>
+                    )}
+                    <button onClick={() => extendSubscription(s.id, 30)} className="px-3 py-1 rounded-lg bg-primary/20 text-primary text-xs">+30 Days</button>
+                    <button onClick={() => extendSubscription(s.id, 365)} className="px-3 py-1 rounded-lg bg-primary/20 text-primary text-xs">+1 Year</button>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-1 text-xs mb-3">
-                  <div><span className="text-muted-foreground">Plan:</span> {s.plan_type}</div>
-                  <div><span className="text-muted-foreground">Started:</span> {new Date(s.starts_at).toLocaleDateString()}</div>
-                  <div><span className="text-muted-foreground">Expires:</span> {new Date(s.expires_at).toLocaleDateString()}</div>
-                  <div><span className="text-muted-foreground">Status:</span> {s.status}</div>
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  {!isCancelled && (
-                    <button onClick={() => cancelSubscription(s.id)} className="px-3 py-1 rounded-lg bg-red-500/20 text-red-400 text-xs">Cancel</button>
-                  )}
-                  <button onClick={() => extendSubscription(s.id, 30)} className="px-3 py-1 rounded-lg bg-primary/20 text-primary text-xs">+30 Days</button>
-                  <button onClick={() => extendSubscription(s.id, 365)} className="px-3 py-1 rounded-lg bg-primary/20 text-primary text-xs">+1 Year</button>
-                </div>
-              </div>
-            );
-          })}
-          {(!subscriptions || subscriptions.length === 0) && (
-            <p className="text-center text-muted-foreground text-sm py-8">No subscriptions yet</p>
-          )}
+              );
+            })}
+            {filteredSubscriptions.length === 0 && (
+              <p className="text-center text-muted-foreground text-sm py-8">No subscriptions on the selected date</p>
+            )}
+          </div>
         </div>
       )}
 

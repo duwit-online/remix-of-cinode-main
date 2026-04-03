@@ -38,6 +38,7 @@ const AppLayout = () => {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/app" element={<Index />} />
+        <Route path="/index" element={<Index />} />
         <Route path="/watch/:type/:id" element={<Watch />} />
         <Route path="/search" element={<Search />} />
         <Route path="/movies" element={<Movies />} />

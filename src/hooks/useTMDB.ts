@@ -32,6 +32,13 @@ export const useMoviesByGenre = (genreId: number, page = 1) =>
     enabled: !!genreId,
   });
 
+export const useTVByGenre = (genreId: number, page = 1) =>
+  useQuery({
+    queryKey: ["tv-genre", genreId, page],
+    queryFn: () => tmdb.getTVByGenre(genreId, page),
+    enabled: !!genreId,
+  });
+
 export const useMovieDetail = (id: number) =>
   useQuery({
     queryKey: ["movie-detail", id],

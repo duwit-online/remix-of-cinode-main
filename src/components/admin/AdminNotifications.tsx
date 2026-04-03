@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Send, Bell, Mail, User, Users } from "lucide-react";
+import { Send, Bell, Mail, User, Users, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+
+const buildNotificationGroupKey = (item: any) => `${item.title}__${item.message}__${item.type}__${item.target}__${item.created_at}__${item.created_by || "system"}`;
 
 const AdminNotifications = () => {
   const { user } = useAuth();
@@ -37,8 +39,18 @@ const AdminNotifications = () => {
       .from("notifications")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(20);
-    setSentNotifications((data as any[]) || []);
+      .limit(100);
+
+    const grouped = new Map<string, any>();
+    ((data as any[]) || []).forEach((item: any) => {
+      const key = buildNotificationGroupKey(item);
+      if (!grouped.has(key)) {
+        grouped.set(key, { ...item, delivery_count: 0 });
+      }
+      grouped.get(key).delivery_count += 1;
+    });
+
+    setSentNotifications(Array.from(grouped.values()).slice(0, 12));
   };
 
   const fetchEmailConfig = async () => {
@@ -150,6 +162,75 @@ const AdminNotifications = () => {
       }
     }
     setSending(false);
+  };
+
+  const resendNotification = async (notification: any) => {
+    setTitle(notification.title);
+    setMessage(notification.message);
+    setType(notification.type);
+    setTarget(notification.target === "single" ? "single" : "all");
+
+    if (notification.target === "single" && notification.target_user_id) {
+      const { data: profile } = await supabase.from("profiles").select("email").eq("user_id", notification.target_user_id).maybeSingle();
+      setTargetEmail((profile as any)?.email || "");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    if (notification.target === "all") {
+      const { data: profiles } = await supabase.from("profiles").select("user_id");
+      if (profiles?.length) {
+        const rows = profiles.map((profile: any) => ({
+          title: notification.title,
+          message: notification.message,
+          type: notification.type,
+          target: "all",
+          user_id: profile.user_id,
+          created_by: user?.id,
+        }));
+        const { error } = await supabase.from("notifications").insert(rows as any);
+        if (error) {
+          toast({ title: "Error", description: error.message, variant: "destructive" });
+          return;
+        }
+      }
+    } else if (notification.target_user_id) {
+      const { error } = await supabase.from("notifications").insert({
+        title: notification.title,
+        message: notification.message,
+        type: notification.type,
+        target: "single",
+        user_id: notification.target_user_id,
+        target_user_id: notification.target_user_id,
+        created_by: user?.id,
+      } as any);
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+        return;
+      }
+    }
+
+    toast({ title: "Notification resent" });
+    fetchSent();
+  };
+
+  const deleteNotificationGroup = async (notification: any) => {
+    const { error } = await supabase
+      .from("notifications")
+      .delete()
+      .eq("title", notification.title)
+      .eq("message", notification.message)
+      .eq("type", notification.type)
+      .eq("target", notification.target)
+      .eq("created_at", notification.created_at);
+
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    toast({ title: "Notification deleted" });
+    fetchSent();
   };
 
   return (
@@ -271,8 +352,17 @@ const AdminNotifications = () => {
                 <p className="text-sm font-medium">{n.title}</p>
                 <span className="px-2 py-0.5 rounded-md bg-secondary text-[10px] text-muted-foreground">{n.type}</span>
                 <span className="px-2 py-0.5 rounded-md bg-secondary text-[10px] text-muted-foreground">{n.target}</span>
+                <span className="px-2 py-0.5 rounded-md bg-secondary text-[10px] text-muted-foreground">{n.delivery_count} sent</span>
               </div>
               <p className="text-xs text-muted-foreground">{n.message}</p>
+              <div className="flex gap-2 mt-3">
+                <button onClick={() => resendNotification(n)} className="inline-flex items-center gap-1 rounded-xl bg-secondary/50 px-3 py-1.5 text-xs font-medium">
+                  <RotateCcw size={12} /> Resend
+                </button>
+                <button onClick={() => deleteNotificationGroup(n)} className="inline-flex items-center gap-1 rounded-xl bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive">
+                  <Trash2 size={12} /> Delete
+                </button>
+              </div>
             </div>
           ))}
         </div>

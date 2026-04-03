@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Users, Plus, Trash2, Copy, Edit2 } from "lucide-react";
+import { Users, Plus, Trash2, Copy, Edit2, Search } from "lucide-react";
 
 const AdminAffiliates = () => {
   const { user } = useAuth();
@@ -12,63 +12,61 @@ const AdminAffiliates = () => {
   const [customCode, setCustomCode] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editCode, setEditCode] = useState("");
+  const [search, setSearch] = useState("");
 
-  const { data: affiliates } = useQuery({
+  const { data: data } = useQuery({
     queryKey: ["admin-affiliates"],
     queryFn: async () => {
-      const { data } = await supabase.from("affiliates").select("*, profiles:user_id(display_name, email)").order("created_at", { ascending: false });
-      return (data as any[]) || [];
-    },
-  });
+      const [{ data: affiliates }, { data: profiles }, { data: referrals }, { data: earnings }, { data: subscriptions }] = await Promise.all([
+        supabase.from("affiliates").select("*").order("created_at", { ascending: false }),
+        supabase.from("profiles").select("user_id, display_name, email, created_at"),
+        supabase.from("referrals").select("*"),
+        supabase.from("affiliate_earnings").select("*"),
+        supabase.from("subscriptions").select("user_id, status, expires_at").eq("status", "active"),
+      ]);
 
-  const { data: allProfiles } = useQuery({
-    queryKey: ["admin-all-profiles"],
-    queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("user_id, display_name, email");
-      return (data as any[]) || [];
-    },
-  });
+      const profilesByUserId = new Map((profiles || []).map((profile: any) => [profile.user_id, profile]));
+      const activePaidUserIds = new Set(
+        (subscriptions || [])
+          .filter((subscription: any) => new Date(subscription.expires_at) > new Date())
+          .map((subscription: any) => subscription.user_id)
+      );
 
-  // Referral details per affiliate
-  const { data: referralDetails } = useQuery({
-    queryKey: ["admin-affiliate-referrals-details"],
-    queryFn: async () => {
-      const { data } = await supabase.from("referrals").select("*, profiles:referred_user_id(display_name, email, created_at)").order("created_at", { ascending: false });
-      return (data as any[]) || [];
-    },
-  });
+      const affiliateCards = ((affiliates as any[]) || []).map((affiliate: any) => {
+        const affiliateReferrals = ((referrals as any[]) || [])
+          .filter((referral: any) => referral.affiliate_id === affiliate.id)
+          .map((referral: any) => {
+            const referredProfile = profilesByUserId.get(referral.referred_user_id);
+            const isPaid = activePaidUserIds.has(referral.referred_user_id);
+            return {
+              ...referral,
+              profile: referredProfile,
+              isPaid,
+            };
+          })
+          .sort((left: any, right: any) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime());
 
-  const { data: stats } = useQuery({
-    queryKey: ["admin-affiliate-stats"],
-    queryFn: async () => {
-      const { data: refs } = await supabase.from("referrals").select("affiliate_id");
-      const { data: earns } = await supabase.from("affiliate_earnings").select("affiliate_id, amount, status");
-      const refCounts: Record<string, number> = {};
-      const earnTotals: Record<string, number> = {};
-      const pendingTotals: Record<string, number> = {};
-      refs?.forEach((r: any) => { refCounts[r.affiliate_id] = (refCounts[r.affiliate_id] || 0) + 1; });
-      earns?.forEach((e: any) => {
-        earnTotals[e.affiliate_id] = (earnTotals[e.affiliate_id] || 0) + Number(e.amount);
-        if (e.status === "pending") pendingTotals[e.affiliate_id] = (pendingTotals[e.affiliate_id] || 0) + Number(e.amount);
+        const affiliateEarnings = ((earnings as any[]) || []).filter((earning: any) => earning.affiliate_id === affiliate.id);
+        const totalEarnings = affiliateEarnings.reduce((sum: number, earning: any) => sum + Number(earning.amount), 0);
+        const pendingEarnings = affiliateEarnings.filter((earning: any) => earning.status === "pending").reduce((sum: number, earning: any) => sum + Number(earning.amount), 0);
+
+        return {
+          ...affiliate,
+          profile: profilesByUserId.get(affiliate.user_id) || null,
+          referrals: affiliateReferrals,
+          stats: {
+            referrals: affiliateReferrals.length,
+            paidUsers: affiliateReferrals.filter((referral: any) => referral.isPaid).length,
+            earnings: totalEarnings,
+            pending: pendingEarnings,
+          },
+        };
       });
-      return { refCounts, earnTotals, pendingTotals };
-    },
-  });
 
-  // Paid users per affiliate
-  const { data: paidUserCounts } = useQuery({
-    queryKey: ["admin-affiliate-paid-users"],
-    queryFn: async () => {
-      const { data: subs } = await supabase.from("subscriptions").select("user_id").eq("status", "active");
-      const paidUserIds = new Set(subs?.map((s: any) => s.user_id) || []);
-      const { data: refs } = await supabase.from("referrals").select("affiliate_id, referred_user_id");
-      const counts: Record<string, number> = {};
-      refs?.forEach((r: any) => {
-        if (paidUserIds.has(r.referred_user_id)) {
-          counts[r.affiliate_id] = (counts[r.affiliate_id] || 0) + 1;
-        }
-      });
-      return counts;
+      return {
+        affiliates: affiliateCards,
+        allProfiles: (profiles as any[]) || [],
+      };
     },
   });
 
@@ -109,14 +107,39 @@ const AdminAffiliates = () => {
     qc.invalidateQueries({ queryKey: ["admin-affiliates"] });
   };
 
+  const affiliates = data?.affiliates || [];
+  const allProfiles = data?.allProfiles || [];
   const existingUserIds = new Set(affiliates?.map((a: any) => a.user_id) || []);
   const availableProfiles = allProfiles?.filter((p: any) => !existingUserIds.has(p.user_id)) || [];
+  const filteredAffiliates = affiliates.filter((affiliate: any) => {
+    const haystack = `${affiliate.profile?.display_name || ""} ${affiliate.profile?.email || ""} ${affiliate.referral_code || ""}`.toLowerCase();
+    return haystack.includes(search.toLowerCase());
+  });
 
-  const getReferralsForAffiliate = (affId: string) => referralDetails?.filter((r: any) => r.affiliate_id === affId) || [];
+  const summary = {
+    affiliates: affiliates.length,
+    signups: affiliates.reduce((sum: number, affiliate: any) => sum + affiliate.stats.referrals, 0),
+    paid: affiliates.reduce((sum: number, affiliate: any) => sum + affiliate.stats.paidUsers, 0),
+    earnings: affiliates.reduce((sum: number, affiliate: any) => sum + affiliate.stats.earnings, 0),
+  };
 
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-bold flex items-center gap-2"><Users size={20} /> Affiliate Management</h2>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: "Affiliates", value: summary.affiliates },
+          { label: "Signups", value: summary.signups },
+          { label: "Paid Users", value: summary.paid },
+          { label: "Earnings", value: `₦${summary.earnings.toLocaleString()}` },
+        ].map((item) => (
+          <div key={item.label} className="glass rounded-xl border border-border/30 p-4">
+            <p className="text-xs text-muted-foreground">{item.label}</p>
+            <p className="text-xl font-display font-black">{item.value}</p>
+          </div>
+        ))}
+      </div>
 
       <div className="glass rounded-xl p-4 border border-border/30 space-y-3">
         <h3 className="text-sm font-semibold">Add Marketer</h3>
@@ -132,15 +155,19 @@ const AdminAffiliates = () => {
         </button>
       </div>
 
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search affiliate, email, or code" className="w-full bg-secondary/50 border border-border/30 rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none" />
+      </div>
+
       <div className="space-y-3">
-        {affiliates?.map((a: any) => {
-          const affReferrals = getReferralsForAffiliate(a.id);
+        {filteredAffiliates.map((a: any) => {
           return (
             <div key={a.id} className="glass rounded-xl p-4 border border-border/30">
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <p className="text-sm font-medium">{a.profiles?.display_name || "User"}</p>
-                  <p className="text-xs text-muted-foreground">{a.profiles?.email}</p>
+                  <p className="text-sm font-medium">{a.profile?.display_name || "User"}</p>
+                  <p className="text-xs text-muted-foreground">{a.profile?.email || "No email"}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => toggleActive(a.id, a.is_active)} className={`text-xs px-2 py-0.5 rounded-full ${a.is_active ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
@@ -167,29 +194,37 @@ const AdminAffiliates = () => {
               </div>
 
               <div className="grid grid-cols-4 gap-2 text-xs mb-3">
-                <div>Referrals: <span className="font-semibold">{stats?.refCounts?.[a.id] || 0}</span></div>
-                <div>Paid: <span className="font-semibold">{paidUserCounts?.[a.id] || 0}</span></div>
-                <div>Earnings: <span className="font-semibold text-green-400">₦{(stats?.earnTotals?.[a.id] || 0).toLocaleString()}</span></div>
-                <div>Pending: <span className="font-semibold text-yellow-400">₦{(stats?.pendingTotals?.[a.id] || 0).toLocaleString()}</span></div>
+                <div>Referrals: <span className="font-semibold">{a.stats.referrals}</span></div>
+                <div>Paid: <span className="font-semibold">{a.stats.paidUsers}</span></div>
+                <div>Earnings: <span className="font-semibold text-green-400">₦{a.stats.earnings.toLocaleString()}</span></div>
+                <div>Pending: <span className="font-semibold text-yellow-400">₦{a.stats.pending.toLocaleString()}</span></div>
               </div>
 
-              {/* Referred users list */}
-              {affReferrals.length > 0 && (
+              {a.referrals.length > 0 && (
                 <details className="text-xs">
-                  <summary className="cursor-pointer text-muted-foreground mb-1">View referred users ({affReferrals.length})</summary>
+                  <summary className="cursor-pointer text-muted-foreground mb-1">View referred users ({a.referrals.length})</summary>
                   <div className="divide-y divide-border/20 mt-1">
-                    {affReferrals.map((r: any) => (
-                      <div key={r.id} className="py-1.5 flex justify-between">
-                        <span>{r.profiles?.display_name || r.profiles?.email || "User"}</span>
-                        <span className="text-muted-foreground">{new Date(r.created_at).toLocaleDateString()}</span>
+                    {a.referrals.map((r: any) => (
+                      <div key={r.id} className="py-2 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium">{r.profile?.display_name || r.profile?.email || "User"}</p>
+                          <p className="text-muted-foreground">Joined {new Date(r.profile?.created_at || r.created_at).toLocaleDateString()}</p>
+                        </div>
+                        <span className={`rounded-full px-2 py-0.5 ${r.isPaid ? "bg-primary/20 text-primary" : "bg-secondary text-muted-foreground"}`}>
+                          {r.isPaid ? "Paid" : "Free"}
+                        </span>
                       </div>
                     ))}
                   </div>
                 </details>
               )}
+
+              {a.referrals.length === 0 && <p className="text-xs text-muted-foreground">No referred signups yet.</p>}
             </div>
           );
         })}
+
+        {filteredAffiliates.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">No affiliates found.</p>}
       </div>
     </div>
   );

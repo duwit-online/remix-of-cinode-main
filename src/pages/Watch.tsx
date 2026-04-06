@@ -117,18 +117,76 @@ const Watch = () => {
     mediaType === "tv" ? episode : undefined
   );
 
+  // Load admin-configured playback source ordering
+  const { data: playbackSourceConfig } = useQuery({
+    queryKey: ["playback-sources-config"],
+    queryFn: async () => {
+      const { data } = await supabase.from("app_settings").select("*").eq("key", "playback_sources").maybeSingle();
+      return (data?.value as any)?.sources as Array<{ id: string; name: string; url_template: string; source_type: string; is_enabled: boolean; priority: number }> | undefined;
+    },
+    staleTime: 60_000,
+  });
+
   const { activeSource, streamUrl } = useMemo((): { activeSource: PlayerSource; streamUrl: string } => {
+    // Offline always first
     if (offlineUrl) return { activeSource: "offline", streamUrl: offlineUrl };
-    if (bridgeData?.stream_url && !bridgeError) return { activeSource: "telegram_bridge", streamUrl: bridgeData.stream_url };
-    if (jellyfinData?.stream_url && !videoError) return { activeSource: "jellyfin", streamUrl: jellyfinData.stream_url };
-    if ((override as any)?.custom_url) return { activeSource: "override", streamUrl: (override as any).custom_url };
-    if (embedIndex < embedProviders.length) {
-      const provider = embedProviders[embedIndex];
-      const url = provider.getUrl(mediaType, imdbId || "", tmdbId, mediaType === "tv" ? season : undefined, mediaType === "tv" ? episode : undefined);
-      return { activeSource: "embed", streamUrl: url };
+
+    // Build ordered source list from admin config (or fallback to defaults)
+    const defaultOrder = ["telegram", "jellyfin", "override", "embed"];
+    const orderedSources = playbackSourceConfig
+      ? [...playbackSourceConfig].sort((a, b) => b.priority - a.priority).filter(s => s.is_enabled)
+      : null;
+
+    const trySource = (sourceId: string): { activeSource: PlayerSource; streamUrl: string } | null => {
+      if (sourceId === "telegram" || sourceId.includes("telegram")) {
+        if (bridgeData?.stream_url && !bridgeError) return { activeSource: "telegram_bridge", streamUrl: bridgeData.stream_url };
+      } else if (sourceId === "jellyfin" || sourceId.includes("jellyfin")) {
+        if (jellyfinData?.stream_url && !videoError) return { activeSource: "jellyfin", streamUrl: jellyfinData.stream_url };
+      } else if (sourceId === "override" || sourceId.includes("override")) {
+        if ((override as any)?.custom_url) return { activeSource: "override", streamUrl: (override as any).custom_url };
+      } else {
+        // It's an embed source - check if url_template matches any provider or use the template directly
+        const src = orderedSources?.find(s => s.id === sourceId);
+        if (src && src.source_type === "embed" && src.url_template) {
+          let url = src.url_template
+            .replace("{type}", mediaType)
+            .replace("{tmdb_id}", String(tmdbId))
+            .replace("{imdb_id}", imdbId || "")
+            .replace("{id}", imdbId || String(tmdbId));
+          if (mediaType === "tv") {
+            url += `/${season}/${episode}`;
+          }
+          return { activeSource: "embed", streamUrl: url };
+        }
+      }
+      return null;
+    };
+
+    if (orderedSources) {
+      // Track embed index for ordered embed fallback
+      let embedsTriedCount = 0;
+      for (const src of orderedSources) {
+        if (src.source_type === "embed") {
+          if (embedsTriedCount < embedIndex) { embedsTriedCount++; continue; }
+        }
+        const result = trySource(src.id);
+        if (result) return result;
+        if (src.source_type === "embed") embedsTriedCount++;
+      }
+    } else {
+      // Default hardcoded order
+      if (bridgeData?.stream_url && !bridgeError) return { activeSource: "telegram_bridge", streamUrl: bridgeData.stream_url };
+      if (jellyfinData?.stream_url && !videoError) return { activeSource: "jellyfin", streamUrl: jellyfinData.stream_url };
+      if ((override as any)?.custom_url) return { activeSource: "override", streamUrl: (override as any).custom_url };
+      if (embedIndex < embedProviders.length) {
+        const provider = embedProviders[embedIndex];
+        const url = provider.getUrl(mediaType, imdbId || "", tmdbId, mediaType === "tv" ? season : undefined, mediaType === "tv" ? episode : undefined);
+        return { activeSource: "embed", streamUrl: url };
+      }
     }
+
     return { activeSource: "none", streamUrl: "" };
-  }, [offlineUrl, bridgeData, bridgeError, jellyfinData, videoError, override, imdbId, mediaType, season, episode, tmdbId, embedIndex]);
+  }, [offlineUrl, bridgeData, bridgeError, jellyfinData, videoError, override, imdbId, mediaType, season, episode, tmdbId, embedIndex, playbackSourceConfig]);
 
   const tryNextEmbed = useCallback(() => {
     if (embedIndex < embedProviders.length - 1) setEmbedIndex(prev => prev + 1);

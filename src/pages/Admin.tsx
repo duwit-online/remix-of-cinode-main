@@ -14,8 +14,9 @@ import AdminPayments from "@/components/admin/AdminPayments";
 import AdminAffiliates from "@/components/admin/AdminAffiliates";
 import AdminPaymentSettings from "@/components/admin/AdminPaymentSettings";
 import AdminPlaybackSources from "@/components/admin/AdminPlaybackSources";
+import AdminStreamedLibrary from "@/components/admin/AdminStreamedLibrary";
 
-type Tab = "settings" | "users" | "content" | "servers" | "media" | "ads" | "notifications" | "payments" | "affiliates" | "payment-settings" | "playback-sources";
+type Tab = "settings" | "users" | "content" | "servers" | "media" | "ads" | "notifications" | "payments" | "affiliates" | "payment-settings" | "playback-sources" | "library";
 
 const tabs: { id: Tab; label: string; icon: any }[] = [
   { id: "settings", label: "Settings", icon: Settings },

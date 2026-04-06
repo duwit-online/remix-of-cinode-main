@@ -14,8 +14,9 @@ import AdminPayments from "@/components/admin/AdminPayments";
 import AdminAffiliates from "@/components/admin/AdminAffiliates";
 import AdminPaymentSettings from "@/components/admin/AdminPaymentSettings";
 import AdminPlaybackSources from "@/components/admin/AdminPlaybackSources";
+import AdminStreamedLibrary from "@/components/admin/AdminStreamedLibrary";
 
-type Tab = "settings" | "users" | "content" | "servers" | "media" | "ads" | "notifications" | "payments" | "affiliates" | "payment-settings" | "playback-sources";
+type Tab = "settings" | "users" | "content" | "servers" | "media" | "ads" | "notifications" | "payments" | "affiliates" | "payment-settings" | "playback-sources" | "library";
 
 const tabs: { id: Tab; label: string; icon: any }[] = [
   { id: "settings", label: "Settings", icon: Settings },
@@ -25,6 +26,7 @@ const tabs: { id: Tab; label: string; icon: any }[] = [
   { id: "playback-sources", label: "Sources", icon: Play },
   { id: "servers", label: "Servers", icon: Server },
   { id: "media", label: "Media", icon: Database },
+  { id: "library", label: "Library", icon: Film },
   { id: "content", label: "Content", icon: Film },
   { id: "users", label: "Users", icon: Users },
   { id: "ads", label: "Ads", icon: Megaphone },
@@ -76,6 +78,7 @@ const Admin = () => {
         {activeTab === "servers" && <AdminServers />}
         {activeTab === "media" && <AdminMediaSources />}
         {activeTab === "content" && <AdminContent />}
+        {activeTab === "library" && <AdminStreamedLibrary />}
         {activeTab === "users" && <AdminUsers />}
         {activeTab === "ads" && <AdminAds />}
         {activeTab === "notifications" && <AdminNotifications />}

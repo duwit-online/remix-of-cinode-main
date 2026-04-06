@@ -21,6 +21,7 @@ import Downloads from "./pages/Downloads";
 import Premium from "./pages/Premium";
 import Checkout from "./pages/Checkout";
 import AffiliatesDashboard from "./pages/AffiliatesDashboard";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -52,6 +53,7 @@ const AppLayout = () => {
         <Route path="/premium" element={<Premium />} />
         <Route path="/checkout" element={<Checkout />} />
         <Route path="/affiliates" element={<AffiliatesDashboard />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </>

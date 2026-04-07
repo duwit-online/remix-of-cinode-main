@@ -3,25 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Download, Trash2, Play, HardDrive, ArrowLeft } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getImageUrl } from "@/lib/tmdb";
+import { clearOfflineMediaRecords, deleteOfflineMediaRecord, getAllOfflineMediaRecords } from "@/lib/offlineMedia";
 import type { DownloadedVideo } from "@/hooks/useOfflineDownload";
-
-const DB_NAME = "cinode_offline";
-const STORE_NAME = "videos";
-const DB_VERSION = 1;
-
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: "key" });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -42,24 +25,9 @@ const Downloads = () => {
 
   const loadVideos = useCallback(async () => {
     try {
-      const db = await openDB();
-      const tx = db.transaction(STORE_NAME, "readonly");
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.getAll();
-      req.onsuccess = () => {
-        const items: DownloadedVideo[] = (req.result || []).map((item: any) => ({
-          key: item.key,
-          title: item.title,
-          posterPath: item.posterPath,
-          mediaType: item.mediaType,
-          tmdbId: item.tmdbId,
-          size: item.size || 0,
-          downloadedAt: item.downloadedAt || 0,
-        }));
-        items.sort((a, b) => b.downloadedAt - a.downloadedAt);
-        setVideos(items);
-        setLoading(false);
-      };
+      const items = await getAllOfflineMediaRecords();
+      setVideos(items as DownloadedVideo[]);
+      setLoading(false);
     } catch {
       setLoading(false);
     }
@@ -69,18 +37,14 @@ const Downloads = () => {
 
   const removeVideo = async (key: string) => {
     try {
-      const db = await openDB();
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      tx.objectStore(STORE_NAME).delete(key);
+      await deleteOfflineMediaRecord(key);
       setVideos((prev) => prev.filter((v) => v.key !== key));
     } catch {}
   };
 
   const clearAll = async () => {
     try {
-      const db = await openDB();
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      tx.objectStore(STORE_NAME).clear();
+      await clearOfflineMediaRecords();
       setVideos([]);
     } catch {}
   };
@@ -88,7 +52,8 @@ const Downloads = () => {
   const totalSize = videos.reduce((sum, v) => sum + v.size, 0);
 
   const playVideo = (v: DownloadedVideo) => {
-    navigate(`/watch/${v.mediaType}/${v.tmdbId}`);
+    const search = v.mediaType === "tv" && v.season && v.episode ? `?season=${v.season}&episode=${v.episode}` : "";
+    navigate(`/watch/${v.mediaType}/${v.tmdbId}${search}`);
   };
 
   return (
@@ -167,7 +132,7 @@ const Downloads = () => {
                 {/* Info */}
                 <div className="flex-1 min-w-0 cursor-pointer" onClick={() => playVideo(video)}>
                   <p className="text-sm font-semibold truncate">{video.title || "Untitled"}</p>
-                  <p className="text-[10px] text-muted-foreground capitalize">{video.mediaType}</p>
+                  <p className="text-[10px] text-muted-foreground capitalize">{video.mediaType}{video.season && video.episode ? ` • S${video.season}E${video.episode}` : ""}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-[10px] text-muted-foreground">{formatBytes(video.size)}</span>
                     <span className="text-[10px] text-muted-foreground">•</span>

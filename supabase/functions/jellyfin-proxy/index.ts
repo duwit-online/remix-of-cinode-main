@@ -18,6 +18,76 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
+    let body: any = {};
+    if (req.method !== "GET") {
+      try {
+        body = await req.json();
+      } catch {
+        body = {};
+      }
+    }
+
+    const action = body.action || url.searchParams.get("action");
+
+    if (req.method === "POST" && action === "test_connection") {
+      const serverId = body.server_id;
+      if (!serverId) {
+        return new Response(JSON.stringify({ ok: false, error: "server_id is required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: server } = await supabase
+        .from("streaming_servers")
+        .select("*")
+        .eq("id", serverId)
+        .single();
+
+      if (!server) {
+        return new Response(JSON.stringify({ ok: false, error: "Server not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const baseUrl = server.server_url.replace(/\/$/, "");
+      const apiKey = server.api_key_encrypted;
+
+      try {
+        const infoRes = await fetch(`${baseUrl}/System/Info`, {
+          headers: { "X-Emby-Token": apiKey, Accept: "application/json" },
+        });
+
+        if (!infoRes.ok) {
+          const message = infoRes.status === 401 || infoRes.status === 403 ? "Invalid API key" : `Server responded with ${infoRes.status}`;
+          return new Response(JSON.stringify({ ok: false, error: message }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const info = await infoRes.json();
+        const publicInfoRes = await fetch(`${baseUrl}/System/Info/Public`).catch(() => null);
+        const publicInfo = publicInfoRes?.ok ? await publicInfoRes.json() : null;
+
+        return new Response(JSON.stringify({
+          ok: true,
+          server_name: info.ServerName || publicInfo?.ServerName || server.name,
+          version: info.Version || publicInfo?.Version || "Unknown",
+          product_name: info.ProductName || publicInfo?.ProductName || server.server_type,
+          local_address: publicInfo?.LocalAddress || baseUrl,
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch {
+        return new Response(JSON.stringify({ ok: false, error: "Server offline or unreachable" }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
 
     // MODE 1: Streaming proxy — GET /jellyfin-proxy?stream=1&server_id=X&item_id=Y
     if (req.method === "GET" && url.searchParams.get("stream") === "1") {
@@ -96,7 +166,7 @@ serve(async (req) => {
     }
 
     // MODE 2: Search — POST with { tmdb_id, media_type, season, episode }
-    const { tmdb_id, media_type, season, episode } = await req.json();
+    const { tmdb_id, media_type, season, episode } = body;
 
     if (!tmdb_id || !media_type) {
       return new Response(JSON.stringify({ error: "tmdb_id and media_type are required" }), {
@@ -160,6 +230,18 @@ serve(async (req) => {
         }
 
         const itemId = targetItem.Id;
+
+        await supabase.from("media_sources").upsert({
+          tmdb_id,
+          media_type,
+          season: media_type === "tv" ? season : null,
+          episode: media_type === "tv" ? episode : null,
+          title: targetItem.SeriesName || targetItem.Name || null,
+          stream_url: `${supabaseUrl}/functions/v1/jellyfin-proxy?stream=1&server_id=${server.id}&item_id=${itemId}`,
+          file_name: targetItem.Path?.split("/").pop() || targetItem.Name || null,
+          source: `jellyfin:${server.name}`,
+          is_active: true,
+        }, { onConflict: "tmdb_id,media_type,season,episode,source" });
 
         // Return the proxy URL instead of direct Jellyfin URL
         const proxyStreamUrl = `${supabaseUrl}/functions/v1/jellyfin-proxy?stream=1&server_id=${server.id}&item_id=${itemId}`;

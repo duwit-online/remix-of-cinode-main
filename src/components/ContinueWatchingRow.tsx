@@ -88,7 +88,8 @@ const ContinueWatchingRow = () => {
           <button
             key={item.key}
             onClick={() => {
-              const path = `/watch/${item.mediaType}/${item.tmdbId}`;
+              const query = item.mediaType === "tv" && item.season && item.episode ? `?season=${item.season}&episode=${item.episode}` : "";
+              const path = `/watch/${item.mediaType}/${item.tmdbId}${query}`;
               navigate(path);
             }}
             className="flex-shrink-0 w-32 group relative"

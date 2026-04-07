@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, Trash2, Server, Eye, EyeOff, Power, PowerOff, Pencil, Copy, Info } from "lucide-react";
+import { Plus, Trash2, Server, Eye, EyeOff, Power, PowerOff, Pencil, Copy, Info, Loader2, PlugZap } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "@/hooks/use-toast";
 
@@ -43,6 +43,8 @@ const AdminServers = () => {
   const [saving, setSaving] = useState(false);
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
   const [showInfo, setShowInfo] = useState<string | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; server_name?: string; version?: string; product_name?: string; local_address?: string; error?: string }>>({});
 
   useEffect(() => { fetchServers(); }, []);
 
@@ -128,6 +130,31 @@ const AdminServers = () => {
   };
 
   const maskKey = (key: string) => key.length > 8 ? key.slice(0, 4) + "••••••••" + key.slice(-4) : "••••••••";
+
+  const handleTestConnection = async (id: string) => {
+    setTestingId(id);
+    try {
+      const { data, error } = await supabase.functions.invoke("jellyfin-proxy", {
+        body: { action: "test_connection", server_id: id },
+      });
+
+      if (error || !data?.ok) {
+        const message = data?.error || error?.message || "Connection failed";
+        setTestResults((prev) => ({ ...prev, [id]: { ok: false, error: message } }));
+        toast({ title: "Connection failed", description: message, variant: "destructive" });
+        return;
+      }
+
+      setTestResults((prev) => ({ ...prev, [id]: data }));
+      toast({ title: "Server connected", description: `${data.server_name || "Server"} responded successfully.` });
+    } catch (e: any) {
+      const message = e?.message || "Connection failed";
+      setTestResults((prev) => ({ ...prev, [id]: { ok: false, error: message } }));
+      toast({ title: "Connection failed", description: message, variant: "destructive" });
+    } finally {
+      setTestingId(null);
+    }
+  };
 
   const info = SERVER_INFO[form.server_type] || SERVER_INFO.custom;
 
@@ -217,6 +244,9 @@ const AdminServers = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  <button onClick={() => handleTestConnection(s.id)} className="p-2 rounded-full hover:bg-secondary/50 text-primary" title="Test Connection" disabled={testingId === s.id}>
+                    {testingId === s.id ? <Loader2 size={14} className="animate-spin" /> : <PlugZap size={14} />}
+                  </button>
                   <button onClick={() => startEdit(s)} className="p-2 rounded-full hover:bg-secondary/50 text-muted-foreground" title="Edit">
                     <Pencil size={14} />
                   </button>
@@ -239,6 +269,24 @@ const AdminServers = () => {
                   <p className="font-semibold text-foreground mb-1">About {s.server_type}</p>
                   <p>{SERVER_INFO[s.server_type]?.desc || SERVER_INFO.custom.desc}</p>
                   <p className="whitespace-pre-line mt-1 text-muted-foreground/80">{SERVER_INFO[s.server_type]?.help || SERVER_INFO.custom.help}</p>
+                </div>
+              )}
+              {testResults[s.id] && (
+                <div className={`mt-3 rounded-xl border p-3 text-xs ${testResults[s.id].ok ? "border-primary/30 bg-primary/10" : "border-destructive/30 bg-destructive/10"}`}>
+                  {testResults[s.id].ok ? (
+                    <div className="space-y-1 text-foreground">
+                      <p className="font-semibold">Connection OK</p>
+                      <p><span className="text-muted-foreground">Server:</span> {testResults[s.id].server_name || s.name}</p>
+                      <p><span className="text-muted-foreground">Product:</span> {testResults[s.id].product_name || s.server_type}</p>
+                      <p><span className="text-muted-foreground">Version:</span> {testResults[s.id].version || "Unknown"}</p>
+                      <p className="truncate"><span className="text-muted-foreground">Address:</span> {testResults[s.id].local_address || s.server_url}</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 text-foreground">
+                      <p className="font-semibold">Connection failed</p>
+                      <p>{testResults[s.id].error}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

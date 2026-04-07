@@ -1,38 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
+import {
+  deleteOfflineMediaRecord,
+  getOfflineMediaKey,
+  getOfflineMediaPath,
+  getOfflineMediaRecord,
+  saveOfflineMediaRecord,
+  type OfflineMediaRecord,
+} from "@/lib/offlineMedia";
 
-const DB_NAME = "cinode_offline";
-const STORE_NAME = "videos";
-const DB_VERSION = 1;
-
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: "key" });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-export interface DownloadedVideo {
-  key: string;
-  title: string;
-  posterPath: string;
-  mediaType: string;
-  tmdbId: number;
-  blobUrl?: string;
-  size: number;
-  downloadedAt: number;
-}
-
-function getKey(mediaType: string, tmdbId: number, season?: number, episode?: number) {
-  if (mediaType === "tv" && season && episode) return `${mediaType}-${tmdbId}-s${season}e${episode}`;
-  return `${mediaType}-${tmdbId}`;
-}
+export type DownloadedVideo = OfflineMediaRecord;
 
 export function useOfflineDownload(
   streamUrl: string,
@@ -47,24 +23,17 @@ export function useOfflineDownload(
   const [isDownloading, setIsDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [offlineUrl, setOfflineUrl] = useState<string | null>(null);
-  const key = getKey(mediaType, tmdbId, season, episode);
+  const key = getOfflineMediaKey(mediaType, tmdbId, season, episode);
 
-  // Check if already downloaded
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const db = await openDB();
-        const tx = db.transaction(STORE_NAME, "readonly");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.get(key);
-        req.onsuccess = () => {
-          if (!cancelled && req.result?.blob) {
-            setIsDownloaded(true);
-            const url = URL.createObjectURL(req.result.blob);
-            setOfflineUrl(url);
-          }
-        };
+        const record = await getOfflineMediaRecord(key);
+        if (!cancelled && record?.blob) {
+          setIsDownloaded(true);
+          setOfflineUrl(getOfflineMediaPath(key));
+        }
       } catch {}
     })();
     return () => { cancelled = true; };
@@ -78,27 +47,41 @@ export function useOfflineDownload(
       const res = await fetch(streamUrl);
       if (!res.ok) throw new Error("Download failed");
       const contentLength = Number(res.headers.get("content-length") || 0);
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No reader");
+      let blob: Blob;
 
-      const chunks: Uint8Array[] = [];
-      let received = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        received += value.length;
-        if (contentLength > 0) setProgress(Math.round((received / contentLength) * 100));
+      if (!res.body) {
+        blob = await res.blob();
+      } else {
+        const reader = res.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let received = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value) continue;
+          chunks.push(value);
+          received += value.length;
+          if (contentLength > 0) setProgress(Math.round((received / contentLength) * 100));
+        }
+        blob = new Blob(chunks as unknown as BlobPart[], { type: res.headers.get("content-type") || "video/mp4" });
       }
 
-      const blob = new Blob(chunks as unknown as BlobPart[]);
-      const db = await openDB();
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      store.put({ key, blob, title, posterPath, mediaType, tmdbId, size: blob.size, downloadedAt: Date.now() });
+      await saveOfflineMediaRecord({
+        key,
+        blob,
+        title,
+        posterPath,
+        mediaType,
+        tmdbId,
+        season,
+        episode,
+        size: blob.size,
+        mimeType: blob.type || res.headers.get("content-type") || "video/mp4",
+        downloadedAt: Date.now(),
+      });
       
       setIsDownloaded(true);
-      setOfflineUrl(URL.createObjectURL(blob));
+      setOfflineUrl(getOfflineMediaPath(key));
       setProgress(100);
     } catch (e) {
       console.error("Download error:", e);
@@ -109,14 +92,11 @@ export function useOfflineDownload(
 
   const removeDownload = useCallback(async () => {
     try {
-      const db = await openDB();
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      tx.objectStore(STORE_NAME).delete(key);
+      await deleteOfflineMediaRecord(key);
       setIsDownloaded(false);
-      if (offlineUrl) URL.revokeObjectURL(offlineUrl);
       setOfflineUrl(null);
     } catch {}
-  }, [key, offlineUrl]);
+  }, [key]);
 
   return { isDownloaded, isDownloading, progress, offlineUrl, download, removeDownload };
 }

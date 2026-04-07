@@ -21,6 +21,7 @@ function getProgressKey(mediaType: string, tmdbId: number, season?: number, epis
 
 function loadProgress(): ProgressMap {
   try {
+    if (typeof window === "undefined") return {};
     return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
   } catch {
     return {};
@@ -28,6 +29,7 @@ function loadProgress(): ProgressMap {
 }
 
 function saveProgressLocal(map: ProgressMap) {
+  if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
 }
 

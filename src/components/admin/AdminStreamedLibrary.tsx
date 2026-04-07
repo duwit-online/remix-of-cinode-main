@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Film, Tv, ChevronDown, ChevronRight, Database } from "lucide-react";
+import { Film, Tv, ChevronDown, ChevronRight, Database, RefreshCcw } from "lucide-react";
 import { useState } from "react";
 
 interface MediaEntry {
@@ -21,7 +21,7 @@ const AdminStreamedLibrary = () => {
   const [expandedSources, setExpandedSources] = useState<Record<string, boolean>>({});
   const [expandedTypes, setExpandedTypes] = useState<Record<string, boolean>>({});
 
-  const { data: entries = [], isLoading } = useQuery({
+  const { data: entries = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: ["admin-streamed-library"],
     queryFn: async () => {
       const { data } = await supabase
@@ -73,11 +73,16 @@ const AdminStreamedLibrary = () => {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-bold flex items-center gap-2"><Database size={20} /> Streamed Library</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold flex items-center gap-2"><Database size={20} /> Streamed Library</h2>
         <p className="text-xs text-muted-foreground mt-1">
           All films and TV episodes fetched or streamed by each source. Total: <strong>{entries.length}</strong> entries across <strong>{Object.keys(grouped).length}</strong> sources.
         </p>
+        </div>
+        <button onClick={() => refetch()} className="flex items-center gap-2 rounded-xl bg-secondary/60 px-3 py-2 text-xs text-foreground transition-colors hover:bg-secondary">
+          <RefreshCcw size={14} className={isFetching ? "animate-spin" : ""} /> Refresh
+        </button>
       </div>
 
       {Object.entries(grouped).map(([source, data]) => {
@@ -87,6 +92,10 @@ const AdminStreamedLibrary = () => {
         const tvShowCount = Object.keys(data.tv).length;
         const tvEpCount = Object.values(data.tv).reduce((s, eps) => s + eps.length, 0);
 
+        const sourceLabel = source.startsWith("jellyfin:")
+          ? `Jellyfin • ${source.split(":").slice(1).join(":")}`
+          : sourceNames[source] || source;
+
         return (
           <div key={source} className="glass rounded-2xl border border-border/30 overflow-hidden">
             {/* Source Header */}
@@ -95,7 +104,7 @@ const AdminStreamedLibrary = () => {
               className="w-full flex items-center gap-3 p-4 hover:bg-secondary/30 transition-colors text-left"
             >
               {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-              <span className="font-semibold text-sm">{sourceNames[source] || source}</span>
+              <span className="font-semibold text-sm">{sourceLabel}</span>
               <div className="flex gap-2 ml-auto">
                 {movieCount > 0 && (
                   <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold">

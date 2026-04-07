@@ -112,7 +112,7 @@ const AdminStreamedLibrary = () => {
                   </span>
                 )}
                 {tvShowCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 text-[10px] font-bold">
+                  <span className="px-2 py-0.5 rounded-full bg-accent/20 text-accent text-[10px] font-bold">
                     {tvShowCount} Shows · {tvEpCount} Eps
                   </span>
                 )}
@@ -138,7 +138,7 @@ const AdminStreamedLibrary = () => {
                           <div key={m.id} className="flex items-center gap-3 py-1.5 border-b border-border/10 last:border-0">
                             <span className="text-xs font-mono text-muted-foreground w-16 shrink-0">#{m.tmdb_id}</span>
                             <span className="text-sm truncate flex-1">{m.title || "Untitled"}</span>
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${m.is_active ? "bg-green-500" : "bg-muted-foreground/30"}`} title={m.is_active ? "Active" : "Inactive"} />
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${m.is_active ? "bg-primary" : "bg-muted-foreground/30"}`} title={m.is_active ? "Active" : "Inactive"} />
                             <span className="text-[10px] text-muted-foreground shrink-0">
                               {new Date(m.created_at).toLocaleDateString()}
                             </span>
@@ -187,7 +187,7 @@ const AdminStreamedLibrary = () => {
                                         S{String(ep.season || 0).padStart(2, "0")}E{String(ep.episode || 0).padStart(2, "0")}
                                       </span>
                                       <span className="truncate flex-1 text-muted-foreground">{ep.file_name || ep.stream_url.slice(0, 60)}</span>
-                                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ep.is_active ? "bg-green-500" : "bg-muted-foreground/30"}`} />
+                                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ep.is_active ? "bg-primary" : "bg-muted-foreground/30"}`} />
                                     </div>
                                   ))}
                                 </div>

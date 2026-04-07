@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Bookmark, BookmarkCheck, CheckCircle2, Download, LayoutPanelTop, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bookmark, BookmarkCheck, CheckCircle2, Download, LayoutPanelTop, Loader2 } from "lucide-react";
 import { useMovieDetail, useTVDetail, useSeasonDetail, useSimilar, useCredits } from "@/hooks/useTMDB";
 import { embedProviders, getImageUrl, getTitle, getTVExternalIds } from "@/lib/tmdb";
 import { useQuery } from "@tanstack/react-query";

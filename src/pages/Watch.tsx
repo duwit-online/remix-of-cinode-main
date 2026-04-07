@@ -465,9 +465,9 @@ const Watch = () => {
                   </div>
 
                   {/* Production companies */}
-                  {detail.production_companies && detail.production_companies.length > 0 && (
+                  {(detail as any).production_companies && (detail as any).production_companies.length > 0 && (
                     <div className="hidden lg:flex flex-wrap gap-4 mt-4 items-center">
-                      {detail.production_companies.slice(0, 4).map((pc: any) => (
+                      {(detail as any).production_companies.slice(0, 4).map((pc: any) => (
                         <div key={pc.id} className="flex items-center gap-2 text-xs text-muted-foreground">
                           {pc.logo_path && (
                             <img src={getImageUrl(pc.logo_path, "w92")} alt={pc.name} className="h-6 object-contain opacity-70" />

@@ -248,6 +248,7 @@ serve(async (req) => {
 
         return new Response(JSON.stringify({
           stream_url: proxyStreamUrl,
+          download_url: proxyStreamUrl,
           server_name: server.name,
           item_name: targetItem.Name,
           item_id: itemId,

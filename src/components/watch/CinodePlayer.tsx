@@ -49,7 +49,7 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
   const [muted, setMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hoverPercent, setHoverPercent] = useState<number | null>(null);
-  const [qualities, setQualities] = useState<Option[]>([{ label: "Source", value: -1 }]);
+  const [qualities, setQualities] = useState<Option[]>([]);
   const [selectedQuality, setSelectedQuality] = useState(-1);
   const [subtitleTracks, setSubtitleTracks] = useState<Option[]>([{ label: "Off", value: -1 }]);
   const [selectedSubtitle, setSelectedSubtitle] = useState(-1);
@@ -74,7 +74,7 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
     setCurrentTime(0);
     setDuration(0);
     setBuffered(0);
-    setQualities([{ label: "Source", value: -1 }]);
+    setQualities([]);
     setSelectedQuality(-1);
     setSubtitleTracks([{ label: "Off", value: -1 }]);
     setSelectedSubtitle(-1);
@@ -91,7 +91,9 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
     video.muted = false;
     video.playbackRate = playbackRate;
 
-    if (isHlsSource && Hls.isSupported()) {
+    const canUseNativeHls = video.canPlayType("application/vnd.apple.mpegurl") !== "";
+
+    if (isHlsSource && !canUseNativeHls && Hls.isSupported()) {
       const hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 90 });
       hlsRef.current = hls;
       hls.loadSource(src);
@@ -102,6 +104,7 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
         setQualities([{ label: "Auto", value: -1 }, ...levelOptions]);
         const hlsAudioTracks = hls.audioTracks.map((track, index) => ({ label: track.name || track.lang || `Audio ${index + 1}`, value: index }));
         setAudioTracks(hlsAudioTracks);
+        setSelectedAudio(hls.audioTrack >= 0 ? hls.audioTrack : 0);
         const hlsSubtitleTracks = hls.subtitleTracks.map((track, index) => ({ label: track.name || track.lang || `Subtitle ${index + 1}`, value: index }));
         setSubtitleTracks([{ label: "Off", value: -1 }, ...hlsSubtitleTracks]);
         video.play().catch(() => setPlaying(false));
@@ -283,11 +286,14 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
   const bufferedPercent = duration > 0 ? Math.min((buffered / duration) * 100, 100) : 0;
   const playedPercent = duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0;
   const previewTime = hoverPercent !== null ? (duration * hoverPercent) / 100 : null;
+  const showQualitySelect = qualities.length > 1;
+  const showSubtitleSelect = subtitleTracks.length > 1;
+  const showAudioSelect = audioTracks.length > 0;
 
   return (
     <div
       ref={wrapperRef}
-      className="relative h-full w-full overflow-hidden rounded-[1.75rem] bg-black"
+      className="relative h-full w-full overflow-hidden rounded-[1.5rem] bg-black sm:rounded-[1.75rem]"
       onMouseMove={resetHideTimer}
       onTouchStart={resetHideTimer}
     >
@@ -325,7 +331,7 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
             exit={{ opacity: 0 }}
             className="absolute inset-0 flex flex-col justify-between bg-gradient-to-t from-background/90 via-transparent to-background/50"
           >
-            <div className="flex items-start justify-between p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-3 p-3 sm:p-5">
               <div className="max-w-[70%]">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-primary">Cinode Player</p>
                 <h2 className="mt-1 text-sm font-semibold text-foreground sm:text-base">{title}</h2>
@@ -335,19 +341,19 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
               </div>
             </div>
 
-            <div className="absolute inset-0 flex items-center justify-center gap-3 px-4">
-              <button onClick={() => seekTo(currentTime - 10)} className="rounded-full glass p-3 text-foreground transition-transform hover:scale-105">
+            <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 items-center justify-center gap-2 px-3 sm:gap-3 sm:px-4">
+              <button onClick={() => seekTo(currentTime - 10)} className="rounded-full glass p-2.5 text-foreground transition-transform hover:scale-105 sm:p-3">
                 <SkipBack size={18} />
               </button>
-              <button onClick={togglePlay} className="rounded-full bg-primary p-4 text-primary-foreground shadow-2xl shadow-primary/30 transition-transform hover:scale-105">
-                {playing ? <Pause size={24} /> : <Play size={24} className="ml-0.5" fill="currentColor" />}
+              <button onClick={togglePlay} className="rounded-full bg-primary p-3.5 text-primary-foreground shadow-2xl shadow-primary/30 transition-transform hover:scale-105 sm:p-4">
+                {playing ? <Pause size={22} /> : <Play size={22} className="ml-0.5" fill="currentColor" />}
               </button>
-              <button onClick={() => seekTo(currentTime + 10)} className="rounded-full glass p-3 text-foreground transition-transform hover:scale-105">
+              <button onClick={() => seekTo(currentTime + 10)} className="rounded-full glass p-2.5 text-foreground transition-transform hover:scale-105 sm:p-3">
                 <SkipForward size={18} />
               </button>
             </div>
 
-            <div className="space-y-3 p-4 sm:p-5">
+            <div className="space-y-3 p-3 sm:p-5">
               <div className="space-y-2">
                 <div className="relative">
                   <div className="h-1.5 rounded-full bg-foreground/15">
@@ -355,8 +361,9 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
                     <div className="-mt-1.5 h-1.5 rounded-full bg-primary" style={{ width: `${playedPercent}%` }} />
                   </div>
                   {previewTime !== null && (
-                    <div className="absolute bottom-4 -translate-x-1/2 rounded-full bg-card/90 px-2 py-1 text-[10px] text-foreground" style={{ left: `${hoverPercent}%` }}>
-                      {formatTime(previewTime)}
+                    <div className="absolute bottom-5 z-10 w-24 -translate-x-1/2 overflow-hidden rounded-2xl border border-border/40 bg-card/90 shadow-2xl backdrop-blur-md sm:w-28" style={{ left: `${hoverPercent}%` }}>
+                      {poster ? <img src={poster} alt={`${title} preview`} className="h-14 w-full object-cover sm:h-16" loading="lazy" /> : <div className="h-14 w-full bg-secondary/60 sm:h-16" />}
+                      <div className="px-2 py-1 text-center text-[10px] text-foreground">{formatTime(previewTime)}</div>
                     </div>
                   )}
                 </div>
@@ -372,20 +379,29 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
                     setHoverPercent(((event.clientX - rect.left) / rect.width) * 100);
                   }}
                   onMouseLeave={() => setHoverPercent(null)}
-                  className="cinode-slider h-4 w-full"
+                  className="cinode-progress-slider h-4 w-full"
                 />
               </div>
 
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                   <button onClick={togglePlay} className="rounded-full glass p-2.5 text-foreground">
                     {playing ? <Pause size={16} /> : <Play size={16} fill="currentColor" />}
                   </button>
-                  <div className="flex min-w-[132px] items-center gap-2 rounded-full glass px-3 py-2">
+                  <button onClick={() => seekTo(currentTime - 10)} className="rounded-full glass p-2.5 text-foreground md:hidden">
+                    <SkipBack size={16} />
+                  </button>
+                  <button onClick={() => seekTo(currentTime + 10)} className="rounded-full glass p-2.5 text-foreground md:hidden">
+                    <SkipForward size={16} />
+                  </button>
+                  <div className="flex min-w-[120px] flex-1 items-center gap-2 rounded-full glass px-3 py-2 sm:min-w-[132px] sm:flex-none">
                     <button onClick={() => changeVolume(muted || volume === 0 ? 1 : 0)} className="text-foreground">
                       {muted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
                     </button>
                     <input type="range" min={0} max={1} step={0.05} value={muted ? 0 : volume} onChange={(event) => changeVolume(Number(event.target.value))} className="cinode-slider w-full" />
+                  </div>
+                  <div className="rounded-full bg-card/70 px-3 py-2 text-[11px] text-muted-foreground backdrop-blur-md sm:hidden">
+                    {formatTime(currentTime)} / {formatTime(duration)}
                   </div>
                   <button onClick={togglePiP} className="rounded-full glass p-2.5 text-foreground">
                     <PictureInPicture2 size={16} />
@@ -402,23 +418,29 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
                     ))}
                   </select>
 
-                  <select value={selectedQuality} onChange={(event) => setQuality(Number(event.target.value))} className="rounded-full bg-card/80 px-3 py-2 text-xs text-foreground outline-none ring-1 ring-border/40">
-                    {qualities.map((quality) => (
-                      <option key={quality.label} value={quality.value}>{quality.label}</option>
-                    ))}
-                  </select>
+                  {showQualitySelect && (
+                    <select value={selectedQuality} onChange={(event) => setQuality(Number(event.target.value))} className="rounded-full bg-card/80 px-3 py-2 text-xs text-foreground outline-none ring-1 ring-border/40">
+                      {qualities.map((quality) => (
+                        <option key={quality.label} value={quality.value}>{quality.label}</option>
+                      ))}
+                    </select>
+                  )}
 
-                  <select value={selectedSubtitle} onChange={(event) => setSubtitle(Number(event.target.value))} className="rounded-full bg-card/80 px-3 py-2 text-xs text-foreground outline-none ring-1 ring-border/40">
-                    {subtitleTracks.map((track) => (
-                      <option key={track.label} value={track.value}>{track.label}</option>
-                    ))}
-                  </select>
+                  {showSubtitleSelect && (
+                    <select value={selectedSubtitle} onChange={(event) => setSubtitle(Number(event.target.value))} className="rounded-full bg-card/80 px-3 py-2 text-xs text-foreground outline-none ring-1 ring-border/40">
+                      {subtitleTracks.map((track) => (
+                        <option key={track.label} value={track.value}>{track.label}</option>
+                      ))}
+                    </select>
+                  )}
 
-                  <select value={selectedAudio} onChange={(event) => setAudio(Number(event.target.value))} className="rounded-full bg-card/80 px-3 py-2 text-xs text-foreground outline-none ring-1 ring-border/40" disabled={audioTracks.length === 0}>
-                    {audioTracks.length === 0 ? <option value={0}>Audio</option> : audioTracks.map((track) => (
-                      <option key={track.label} value={track.value}>{track.label}</option>
-                    ))}
-                  </select>
+                  {showAudioSelect && (
+                    <select value={selectedAudio} onChange={(event) => setAudio(Number(event.target.value))} className="rounded-full bg-card/80 px-3 py-2 text-xs text-foreground outline-none ring-1 ring-border/40">
+                      {audioTracks.map((track) => (
+                        <option key={track.label} value={track.value}>{track.label}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
             </div>

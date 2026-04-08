@@ -53,13 +53,24 @@ Deno.serve(async (req) => {
 
     const bridgeUrl = `http://163.245.223.36:9090/play?tmdbid=${encodeURIComponent(searchQuery)}`;
 
-    const bridgeRes = await fetch(bridgeUrl, {
-      headers: { "x-api-key": "cinode" },
-    });
+    let bridgeRes: Response;
+
+    try {
+      bridgeRes = await fetch(bridgeUrl, {
+        headers: { "x-api-key": "cinode" },
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Bridge unavailable";
+      return new Response(JSON.stringify({ status: "unavailable", error: message }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (!bridgeRes.ok) {
       return new Response(JSON.stringify({ status: "not_found" }), {
-        status: 404,
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -90,12 +101,12 @@ Deno.serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ status: "not_found" }), {
-      status: 404,
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), {
-      status: 500,
+    return new Response(JSON.stringify({ status: "unavailable", error: e instanceof Error ? e.message : "Bridge unavailable" }), {
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

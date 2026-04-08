@@ -141,13 +141,12 @@ const Watch = () => {
 
   const isDirectVideo = useMemo(() => isDirectVideoUrl(rawStreamUrl), [rawStreamUrl]);
   const downloadStreamUrl = useMemo(() => {
-    if (offlineUrl) return offlineUrl;
     if (bridgeData?.stream_url && isDownloadableUrl(bridgeData.stream_url)) return bridgeData.stream_url;
     if (jellyfinData?.download_url && isDownloadableUrl(jellyfinData.download_url)) return jellyfinData.download_url;
     if (jellyfinData?.stream_url && isDownloadableUrl(jellyfinData.stream_url)) return jellyfinData.stream_url;
     if ((override as any)?.custom_url && isDownloadableUrl((override as any).custom_url)) return (override as any).custom_url;
     return "";
-  }, [offlineUrl, bridgeData, jellyfinData, override]);
+  }, [bridgeData, jellyfinData, override]);
   const canDownload = useMemo(() => isDownloadableUrl(downloadStreamUrl), [downloadStreamUrl]);
 
   const { isDownloaded, isDownloading, progress: dlProgress, offlineUrl, download, removeDownload } = useOfflineDownload(

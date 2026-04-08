@@ -121,6 +121,25 @@
     cursor: pointer;
   }
 
+  .cinode-progress-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .cinode-progress-slider::-webkit-slider-runnable-track {
+    height: 0.35rem;
+    border-radius: 9999px;
+    background: transparent;
+  }
+
+  .cinode-progress-slider::-moz-range-track {
+    height: 0.35rem;
+    border-radius: 9999px;
+    background: transparent;
+  }
+
   .cinode-slider::-webkit-slider-runnable-track {
     height: 0.35rem;
     border-radius: 9999px;
@@ -145,6 +164,26 @@
   }
 
   .cinode-slider::-moz-range-thumb {
+    height: 1rem;
+    width: 1rem;
+    border: 0;
+    border-radius: 9999px;
+    background: hsl(var(--primary));
+    box-shadow: 0 0 0 4px hsl(var(--background) / 0.45);
+  }
+
+  .cinode-progress-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    margin-top: -0.33rem;
+    height: 1rem;
+    width: 1rem;
+    border-radius: 9999px;
+    background: hsl(var(--primary));
+    box-shadow: 0 0 0 4px hsl(var(--background) / 0.45);
+  }
+
+  .cinode-progress-slider::-moz-range-thumb {
     height: 1rem;
     width: 1rem;
     border: 0;

@@ -140,10 +140,18 @@ const Watch = () => {
   }, [bridgeData, jellyfinData, videoError, override]);
 
   const isDirectVideo = useMemo(() => isDirectVideoUrl(rawStreamUrl), [rawStreamUrl]);
-  const canDownload = useMemo(() => isDownloadableUrl(rawStreamUrl), [rawStreamUrl]);
+  const downloadStreamUrl = useMemo(() => {
+    if (offlineUrl) return offlineUrl;
+    if (bridgeData?.stream_url && isDownloadableUrl(bridgeData.stream_url)) return bridgeData.stream_url;
+    if (jellyfinData?.download_url && isDownloadableUrl(jellyfinData.download_url)) return jellyfinData.download_url;
+    if (jellyfinData?.stream_url && isDownloadableUrl(jellyfinData.stream_url)) return jellyfinData.stream_url;
+    if ((override as any)?.custom_url && isDownloadableUrl((override as any).custom_url)) return (override as any).custom_url;
+    return "";
+  }, [offlineUrl, bridgeData, jellyfinData, override]);
+  const canDownload = useMemo(() => isDownloadableUrl(downloadStreamUrl), [downloadStreamUrl]);
 
   const { isDownloaded, isDownloading, progress: dlProgress, offlineUrl, download, removeDownload } = useOfflineDownload(
-    canDownload ? rawStreamUrl : "",
+    canDownload ? downloadStreamUrl : "",
     mediaType, tmdbId,
     detail ? getTitle(detail as any) : offlineMeta?.title || "",
     detail?.poster_path || offlineMeta?.posterPath || "",
@@ -344,8 +352,8 @@ const Watch = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
-      <div className="sticky top-0 z-40 border-b border-border/20 bg-background/85 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center gap-2 px-3 py-3 sm:px-4">
+      <div className="border-b border-border/20 bg-background/85 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-3 sm:px-4">
           <button onClick={() => navigate(-1)} className="rounded-full p-2 transition-colors hover:bg-secondary/50">
             <ArrowLeft size={20} />
           </button>
@@ -359,7 +367,7 @@ const Watch = () => {
             className="flex items-center gap-2 rounded-full bg-secondary/60 px-3 py-2 text-xs text-foreground transition-colors disabled:opacity-40"
             title={canDownload || isDownloaded ? "Download for offline" : "Downloads work on direct streams only"}
           >
-            isDownloading ? (
+            {isDownloading ? (
               <>
                 <Loader2 size={14} className="animate-spin text-primary" />
                 {dlProgress}%
@@ -374,7 +382,7 @@ const Watch = () => {
                 <Download size={14} className="text-primary" />
                 Download
               </>
-            )
+            )}
           </button>
 
           {activeSource === "offline" && (
@@ -391,17 +399,17 @@ const Watch = () => {
             <LayoutPanelTop size={18} />
           </button>
         </div>
+      </div>
 
-        <div className="px-3 pb-4 sm:px-4">
-          <div className={`mx-auto overflow-hidden rounded-[2rem] border border-border/30 bg-card shadow-2xl ${theaterMode ? "max-w-7xl" : "max-w-5xl"}`}>
-            <div className="relative aspect-video bg-black lg:max-h-[72vh]">
+      <div className="sticky top-16 z-30 px-3 pb-4 pt-3 sm:px-4">
+        <div className={`mx-auto overflow-hidden rounded-[1.75rem] border border-border/30 bg-card shadow-2xl ${theaterMode ? "max-w-6xl" : "max-w-4xl xl:max-w-5xl"}`}>
+          <div className="relative aspect-video bg-black lg:max-h-[64vh]">
           {renderPlayer()}
-            </div>
           </div>
         </div>
       </div>
 
-      <div className="mx-auto mt-2 max-w-7xl space-y-6 px-3 sm:px-4">
+      <div className="mx-auto mt-2 max-w-6xl space-y-6 px-3 sm:px-4">
         <AdBanner placement="watch_page" className="mb-4" />
 
         {detail ? (

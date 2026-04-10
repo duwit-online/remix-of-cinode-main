@@ -13,8 +13,6 @@ import {
   Volume2,
   VolumeX,
   Settings2,
-  ChevronRight,
-  Check,
 } from "lucide-react";
 
 type Option = { label: string; value: number };
@@ -57,16 +55,19 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
 
   const isHlsSource = useMemo(() => src.includes("m3u8"), [src]);
 
-  // 1. AUTO-PiP ON SCROLL LOGIC
+  // 1. AUTO-PiP (Works even when paused + Cross-device attempt)
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !("pictureInPictureEnabled" in document)) return;
+    if (!video) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        // If the video is playing and leaves the screen, try to enter PiP
-        if (!entry.isIntersecting && !video.paused && !document.pictureInPictureElement) {
-          video.requestPictureInPicture().catch(() => {}); // Catch browser blocks
+        // Trigger PiP even if paused (requested)
+        if (!entry.isIntersecting && !document.pictureInPictureElement) {
+          video.requestPictureInPicture().catch(() => {
+             // Mobile browsers often block auto-PiP without a click
+             console.log("Auto-PiP blocked by browser policy");
+          });
         } else if (entry.isIntersecting && document.pictureInPictureElement) {
           document.exitPictureInPicture().catch(() => {});
         }
@@ -84,19 +85,21 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
     if (!video) return;
 
     setLoading(true);
-    hlsRef.current?.destroy();
-
     if (isHlsSource && Hls.isSupported()) {
-      const hls = new Hls();
+      const hls = new Hls({ enableWorker: true });
       hlsRef.current = hls;
       hls.loadSource(src);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        setQualities([{ label: "Auto", value: -1 }, ...hls.levels.map((l, i) => ({ label: `${l.height}p`, value: i }))]);
-        video.play().catch(() => setPlaying(false));
+        const levels = hls.levels.map((l, i) => ({ 
+            label: l.height ? `${l.height}p` : `Level ${i}`, 
+            value: i 
+        }));
+        setQualities([{ label: "Auto", value: -1 }, ...levels]);
       });
     } else {
       video.src = src;
+      setQualities([{ label: "Standard", value: -1 }]);
     }
 
     const onPlay = () => setPlaying(true);
@@ -120,6 +123,7 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
       video.removeEventListener("loadedmetadata", onMetadata);
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("canplay", onCanPlay);
+      hlsRef.current?.destroy();
     };
   }, [src, isHlsSource]);
 
@@ -141,14 +145,6 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
         videoRef.current.volume = 0.5;
         setVolume(0.5);
     }
-  };
-
-  const changeQuality = (val: number) => {
-    if (hlsRef.current) {
-        hlsRef.current.currentLevel = val;
-        setSelectedQuality(val);
-    }
-    setShowSettings(false);
   };
 
   const resetHideTimer = () => {
@@ -173,40 +169,39 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="absolute inset-0 z-10 flex flex-col justify-between bg-gradient-to-t from-black/90 via-transparent to-black/60 p-4 md:p-6"
           >
-            {/* TOP BAR: Branding & Timer (Now on Right) */}
+            {/* TOP BAR: Branding & Timer */}
             <div className="flex items-start justify-between">
               <div className="flex flex-col">
-                <span className="text-[10px] font-black tracking-widest text-red-600 uppercase">Cinode Premium</span>
+                <span className="text-[10px] font-black tracking-widest text-orange-400 uppercase">Cinode</span>
                 <h2 className="text-lg font-bold text-white line-clamp-1">{title}</h2>
               </div>
               
-              {/* TIMER: Moved to Upper Right */}
               <div className="text-sm font-mono font-medium text-white/90 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
                 {formatTime(currentTime)} <span className="text-white/30 mx-1">/</span> {formatTime(duration)}
               </div>
             </div>
 
-            {/* CENTER CONTROLS */}
-            <div className="flex items-center justify-center gap-16 md:gap-32">
+            {/* CENTER CONTROLS (Sizes Reduced) */}
+            <div className="flex items-center justify-center gap-12 md:gap-24">
               <button onClick={() => seek(-10)} className="text-white/80 transition-all hover:scale-110 hover:text-white">
-                <RotateCcw size={44} strokeWidth={1.5} />
+                <RotateCcw size={36} strokeWidth={1.5} />
               </button>
               
-              <button onClick={togglePlay} className="flex h-20 w-20 md:h-28 md:w-28 items-center justify-center rounded-full bg-white/10 backdrop-blur-xl border border-white/20 text-white transition-all hover:bg-white/20 active:scale-90">
-                {loading ? <Loader2 className="animate-spin" size={48} /> : 
-                 playing ? <Pause size={52} fill="currentColor" /> : <Play size={52} fill="currentColor" className="ml-2" />}
+              <button onClick={togglePlay} className="flex h-16 w-16 md:h-20 md:w-20 items-center justify-center rounded-full bg-white/10 backdrop-blur-xl border border-white/20 text-white transition-all hover:bg-white/20 active:scale-90">
+                {loading ? <Loader2 className="animate-spin" size={32} /> : 
+                 playing ? <Pause size={36} fill="currentColor" /> : <Play size={36} fill="currentColor" className="ml-1" />}
               </button>
 
               <button onClick={() => seek(10)} className="text-white/80 transition-all hover:scale-110 hover:text-white">
-                <RotateCw size={44} strokeWidth={1.5} />
+                <RotateCw size={36} strokeWidth={1.5} />
               </button>
             </div>
 
             {/* BOTTOM BAR: Controls & Seek */}
             <div className="flex flex-col gap-4">
-              {/* PROGRESS BAR */}
+              {/* PROGRESS BAR (Orange) */}
               <div className="relative h-1.5 w-full cursor-pointer rounded-full bg-white/20 overflow-hidden">
-                <div className="absolute h-full bg-red-600 transition-all duration-100" style={{ width: `${(currentTime/duration)*100}%` }} />
+                <div className="absolute h-full bg-orange-400 transition-all duration-100" style={{ width: `${(currentTime/duration)*100}%` }} />
                 <input 
                   type="range" min={0} max={duration || 0} value={currentTime}
                   onChange={(e) => { if(videoRef.current) videoRef.current.currentTime = Number(e.target.value); }}
@@ -216,10 +211,10 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-6">
-                  {/* VOLUME LOGIC */}
+                  {/* VOLUME (Orange Accent) */}
                   <div className="flex items-center gap-2" onMouseEnter={() => setShowVolumeSlider(true)} onMouseLeave={() => setShowVolumeSlider(false)}>
                     <button onClick={handleMuteToggle} className="text-white/80 hover:text-white transition-colors">
-                      {muted || volume === 0 ? <VolumeX size={24} /> : <Volume2 size={24} />}
+                      {muted || volume === 0 ? <VolumeX size={22} /> : <Volume2 size={22} />}
                     </button>
                     <AnimatePresence>
                       {showVolumeSlider && (
@@ -229,40 +224,36 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
                           onChange={(e) => {
                             const val = Number(e.target.value);
                             setVolume(val);
-                            if (videoRef.current) {
-                                videoRef.current.volume = val;
-                                videoRef.current.muted = val === 0;
-                            }
+                            if (videoRef.current) videoRef.current.volume = val;
                           }}
-                          className="accent-red-600"
+                          className="accent-orange-400 w-20"
                         />
                       )}
                     </AnimatePresence>
                   </div>
                 </div>
 
-                {/* RIGHT SIDE ACTIONS */}
                 <div className="flex items-center gap-5">
-                  {/* SETTINGS DROPDOWN */}
+                  {/* SETTINGS (Quality & Speed) */}
                   <div className="relative">
                     <button onClick={() => setShowSettings(!showSettings)} className="text-white/80 hover:text-white transition-transform hover:rotate-45">
-                      <Settings2 size={24} />
+                      <Settings2 size={22} />
                     </button>
                     
                     <AnimatePresence>
                       {showSettings && (
                         <motion.div 
-                          initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                          className="absolute bottom-full right-0 mb-4 w-64 rounded-xl bg-black/95 backdrop-blur-2xl border border-white/10 p-4 shadow-2xl"
+                          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+                          className="absolute bottom-full right-0 mb-4 w-56 rounded-xl bg-black/95 backdrop-blur-2xl border border-white/10 p-4 shadow-2xl z-50"
                         >
                           <div className="space-y-4">
                             <div>
                               <p className="text-[10px] uppercase font-bold text-white/40 mb-2">Video Quality</p>
-                              <div className="grid grid-cols-2 gap-1">
+                              <div className="flex flex-col gap-1 max-h-32 overflow-y-auto">
                                 {qualities.map((q) => (
                                   <button 
-                                    key={q.value} onClick={() => changeQuality(q.value)}
-                                    className={`text-left px-3 py-1.5 rounded-lg text-xs transition-colors ${selectedQuality === q.value ? 'bg-red-600 text-white' : 'text-white/60 hover:bg-white/10'}`}
+                                    key={q.value} onClick={() => { if(hlsRef.current) hlsRef.current.currentLevel = q.value; setSelectedQuality(q.value); setShowSettings(false); }}
+                                    className={`text-left px-3 py-1.5 rounded-lg text-xs transition-colors ${selectedQuality === q.value ? 'bg-orange-400 text-white' : 'text-white/60 hover:bg-white/10'}`}
                                   >
                                     {q.label}
                                   </button>
@@ -270,12 +261,12 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
                               </div>
                             </div>
                             <div className="border-t border-white/5 pt-3">
-                              <p className="text-[10px] uppercase font-bold text-white/40 mb-2">Playback Speed</p>
-                              <div className="flex flex-wrap gap-1">
-                                {[0.5, 1, 1.5, 2].map((s) => (
+                              <p className="text-[10px] uppercase font-bold text-white/40 mb-2">Speed</p>
+                              <div className="flex gap-1">
+                                {[1, 1.5, 2].map((s) => (
                                   <button 
                                     key={s} onClick={() => { if(videoRef.current) videoRef.current.playbackRate = s; setPlaybackRate(s); setShowSettings(false); }}
-                                    className={`px-3 py-1 rounded-lg text-xs ${playbackRate === s ? 'bg-red-600 text-white' : 'text-white/60 hover:bg-white/10'}`}
+                                    className={`flex-1 py-1 rounded-lg text-xs ${playbackRate === s ? 'bg-orange-400 text-white' : 'text-white/60 hover:bg-white/10'}`}
                                   >
                                     {s}x
                                   </button>
@@ -288,13 +279,12 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
                     </AnimatePresence>
                   </div>
 
-                  <button onClick={() => videoRef.current?.requestPictureInPicture()} className="text-white/80 hover:text-white transition-colors">
-                    <PictureInPicture2 size={24} />
+                  <button onClick={() => videoRef.current?.requestPictureInPicture()} className="text-white/80 hover:text-white">
+                    <PictureInPicture2 size={22} />
                   </button>
 
-                  {/* FULLSCREEN: Now at bottom right */}
                   <button onClick={toggleFullscreen} className="text-white/80 hover:text-white transition-transform hover:scale-110">
-                    {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
+                    {isFullscreen ? <Minimize size={22} /> : <Maximize size={22} />}
                   </button>
                 </div>
               </div>

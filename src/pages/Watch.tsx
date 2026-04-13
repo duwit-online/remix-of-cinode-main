@@ -400,10 +400,10 @@ const Watch = () => {
         </div>
       </div>
 
-      <div className="sticky top-16 z-30 px-3 pb-4 pt-3 sm:px-4">
-        <div className={`mx-auto overflow-hidden rounded-[1.75rem] border border-border/30 bg-card shadow-2xl ${theaterMode ? "max-w-6xl" : "max-w-4xl xl:max-w-5xl"}`}>
-          <div className="relative aspect-video bg-black lg:max-h-[64vh]">
-          {renderPlayer()}
+      <div className="sticky top-12 z-30 px-2 pb-3 pt-2 sm:px-4 sm:pt-3 sm:pb-4">
+        <div className={`mx-auto overflow-hidden rounded-xl sm:rounded-2xl border border-border/30 bg-black shadow-2xl ${theaterMode ? "max-w-6xl" : "max-w-4xl"}`}>
+          <div className="relative w-full" style={{ aspectRatio: "16/9" }}>
+            {renderPlayer()}
           </div>
         </div>
       </div>

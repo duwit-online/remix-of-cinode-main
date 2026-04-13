@@ -1,21 +1,10 @@
 import Hls from "hls.js";
-import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import React, { forwardRef, useEffect, useMemo, useRef, useState, useCallback, useImperativeHandle } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Loader2,
-  Maximize,
-  Minimize,
-  Pause,
-  PictureInPicture2,
-  Play,
-  RotateCcw,
-  RotateCw,
-  Volume2,
-  VolumeX,
-  Settings2,
+  Loader2, Maximize, Minimize, Pause, PictureInPicture2,
+  Play, RotateCcw, RotateCw, Volume2, VolumeX, Settings2
 } from "lucide-react";
-
-type Option = { label: string; value: number };
 
 interface CinodePlayerProps {
   src: string;
@@ -33,7 +22,9 @@ function formatTime(seconds: number) {
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
-const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, title, poster, onError }, forwardedRef) => {
+const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>((props, forwardedRef) => {
+  const { src, title, poster, onError } = props;
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<number | null>(null);
@@ -44,248 +35,202 @@ const CinodePlayer = forwardRef<HTMLVideoElement, CinodePlayerProps>(({ src, tit
   const [showControls, setShowControls] = useState(true);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [qualities, setQualities] = useState<Option[]>([]);
-  const [selectedQuality, setSelectedQuality] = useState(-1);
-  const [playbackRate, setPlaybackRate] = useState(1);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
-  const isHlsSource = useMemo(() => src.includes("m3u8"), [src]);
-
-  // 1. AUTO-PiP (Works even when paused + Cross-device attempt)
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        // Trigger PiP even if paused (requested)
-        if (!entry.isIntersecting && !document.pictureInPictureElement) {
-          video.requestPictureInPicture().catch(() => {
-             // Mobile browsers often block auto-PiP without a click
-             console.log("Auto-PiP blocked by browser policy");
-          });
-        } else if (entry.isIntersecting && document.pictureInPictureElement) {
-          document.exitPictureInPicture().catch(() => {});
-        }
-      },
-      { threshold: 0.1 }
+  // Updated to recognize Jellyfin URLs as direct sources
+  const isDirectSource = useMemo(() => {
+    const s = src.toLowerCase();
+    return (
+      s.includes(".m3u8") ||
+      s.includes(".mp4") ||
+      s.includes("/stream") ||
+      s.includes("/download") ||
+      s.includes("api_key=")
     );
+  }, [src]);
 
-    observer.observe(video);
-    return () => observer.disconnect();
+  useImperativeHandle(forwardedRef, () => videoRef.current!);
+
+  useEffect(() => {
+    const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", handleFsChange);
+    return () => document.removeEventListener("fullscreenchange", handleFsChange);
   }, []);
 
-  // 2. VIDEO ENGINE SETUP
+  const cleanupHls = useCallback(() => {
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !isDirectSource || !src) return;
 
     setLoading(true);
-    if (isHlsSource && Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true });
+    cleanupHls();
+
+    // Strategy 1: HLS.js (For .m3u8 Jellyfin streams)
+    if (Hls.isSupported() && src.includes(".m3u8")) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+      });
       hlsRef.current = hls;
       hls.loadSource(src);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        const levels = hls.levels.map((l, i) => ({ 
-            label: l.height ? `${l.height}p` : `Level ${i}`, 
-            value: i 
-        }));
-        setQualities([{ label: "Auto", value: -1 }, ...levels]);
+        video.play().catch(() => setShowControls(true));
       });
-    } else {
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) onError();
+      });
+    }
+    // Strategy 2: Direct Stream (Jellyfin /Download or /stream?static=true)
+    else {
       video.src = src;
-      setQualities([{ label: "Standard", value: -1 }]);
+      video.load();
+      video.play().catch((err) => {
+        console.error("Playback failed. Check if your browser blocks HTTP content on HTTPS sites.", err);
+        setShowControls(true);
+      });
     }
 
-    const onPlay = () => setPlaying(true);
-    const onPause = () => setPlaying(false);
-    const onTimeUpdate = () => setCurrentTime(video.currentTime);
-    const onMetadata = () => setDuration(video.duration);
-    const onWaiting = () => setLoading(true);
-    const onCanPlay = () => setLoading(false);
-
-    video.addEventListener("play", onPlay);
-    video.addEventListener("pause", onPause);
-    video.addEventListener("timeupdate", onTimeUpdate);
-    video.addEventListener("loadedmetadata", onMetadata);
-    video.addEventListener("waiting", onWaiting);
-    video.addEventListener("canplay", onCanPlay);
-
-    return () => {
-      video.removeEventListener("play", onPlay);
-      video.removeEventListener("pause", onPause);
-      video.removeEventListener("timeupdate", onTimeUpdate);
-      video.removeEventListener("loadedmetadata", onMetadata);
-      video.removeEventListener("waiting", onWaiting);
-      video.removeEventListener("canplay", onCanPlay);
-      hlsRef.current?.destroy();
+    const handlers = {
+      timeupdate: () => setCurrentTime(video.currentTime || 0),
+      loadedmetadata: () => setDuration(video.duration || 0),
+      playing: () => { setLoading(false); setPlaying(true); },
+      pause: () => setPlaying(false),
+      waiting: () => setLoading(true),
+      canplay: () => setLoading(false)
     };
-  }, [src, isHlsSource]);
 
-  const togglePlay = () => (videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause());
-  const seek = (amount: number) => { if (videoRef.current) videoRef.current.currentTime += amount; };
-  
-  const toggleFullscreen = () => {
+    Object.entries(handlers).forEach(([ev, fn]) => video.addEventListener(ev, fn));
+    return () => {
+      cleanupHls();
+      Object.entries(handlers).forEach(([ev, fn]) => video.removeEventListener(ev, fn));
+    };
+  }, [src, isDirectSource, onError, cleanupHls]);
+
+  const handleTogglePlay = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (!videoRef.current) return;
+    if (videoRef.current.paused) videoRef.current.play().catch(() => { });
+    else videoRef.current.pause();
+  }, []);
+
+  const skip = useCallback((e: React.MouseEvent, seconds: number) => {
+    e.stopPropagation();
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.max(0, Math.min(duration, videoRef.current.currentTime + seconds));
+    }
+  }, [duration]);
+
+  const toggleFs = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!document.fullscreenElement) wrapperRef.current?.requestFullscreen();
     else document.exitFullscreen();
-    setIsFullscreen(!isFullscreen);
-  };
+  }, []);
 
-  const handleMuteToggle = () => {
-    if (!videoRef.current) return;
-    const newState = !muted;
-    videoRef.current.muted = newState;
-    setMuted(newState);
-    if (!newState && volume === 0) {
-        videoRef.current.volume = 0.5;
-        setVolume(0.5);
-    }
-  };
-
-  const resetHideTimer = () => {
+  const onMouseMove = useCallback(() => {
     setShowControls(true);
     if (hideTimer.current) clearTimeout(hideTimer.current);
-    if (playing && !showSettings) {
+    if (playing) {
       hideTimer.current = window.setTimeout(() => setShowControls(false), 3000);
     }
-  };
+  }, [playing]);
+
+  const playedPercent = (currentTime / duration) * 100 || 0;
+
+  if (!isDirectSource && src) {
+    return (
+      <div className="relative aspect-video w-full overflow-hidden bg-black sm:rounded-[2rem] border border-white/5 shadow-2xl">
+        <iframe
+          src={src}
+          className="h-full w-full border-0"
+          allow="autoplay; fullscreen; encrypted-media"
+          allowFullScreen
+          referrerPolicy="no-referrer"
+          onLoad={() => setLoading(false)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div
       ref={wrapperRef}
-      className="group relative aspect-video w-full overflow-hidden bg-black ring-1 ring-white/10 sm:rounded-2xl"
-      onMouseMove={resetHideTimer}
+      className="group relative aspect-video w-full overflow-hidden bg-black sm:rounded-[2rem] border border-white/5 shadow-2xl cursor-pointer select-none"
+      onMouseMove={onMouseMove}
+      onMouseLeave={() => playing && setShowControls(false)}
+      onClick={handleTogglePlay}
     >
-      <video ref={videoRef} poster={poster} className="h-full w-full object-contain" playsInline crossOrigin="anonymous" />
+      <video
+        ref={videoRef}
+        poster={poster}
+        className="h-full w-full object-contain pointer-events-none"
+        playsInline
+        crossOrigin="anonymous"
+        muted={muted}
+      />
+
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[2px] z-[30] pointer-events-none">
+          <Loader2 className="animate-spin text-primary" size={48} />
+        </div>
+      )}
 
       <AnimatePresence>
         {showControls && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 z-10 flex flex-col justify-between bg-gradient-to-t from-black/90 via-transparent to-black/60 p-4 md:p-6"
+            className="absolute inset-0 z-20 flex flex-col justify-between bg-gradient-to-t from-black/95 via-transparent to-black/60 p-4 sm:p-8"
           >
-            {/* TOP BAR: Branding & Timer */}
-            <div className="flex items-start justify-between">
-              <div className="flex flex-col">
-                <span className="text-[10px] font-black tracking-widest text-orange-400 uppercase">Cinode</span>
-                <h2 className="text-lg font-bold text-white line-clamp-1">{title}</h2>
+            <div className="flex justify-between items-start" onClick={e => e.stopPropagation()}>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Cinode Player</span>
+                <h2 className="text-lg font-bold truncate max-w-md">{title}</h2>
               </div>
-              
-              <div className="text-sm font-mono font-medium text-white/90 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
-                {formatTime(currentTime)} <span className="text-white/30 mx-1">/</span> {formatTime(duration)}
-              </div>
-            </div>
-
-            {/* CENTER CONTROLS (Sizes Reduced) */}
-            <div className="flex items-center justify-center gap-12 md:gap-24">
-              <button onClick={() => seek(-10)} className="text-white/80 transition-all hover:scale-110 hover:text-white">
-                <RotateCcw size={36} strokeWidth={1.5} />
-              </button>
-              
-              <button onClick={togglePlay} className="flex h-16 w-16 md:h-20 md:w-20 items-center justify-center rounded-full bg-white/10 backdrop-blur-xl border border-white/20 text-white transition-all hover:bg-white/20 active:scale-90">
-                {loading ? <Loader2 className="animate-spin" size={32} /> : 
-                 playing ? <Pause size={36} fill="currentColor" /> : <Play size={36} fill="currentColor" className="ml-1" />}
-              </button>
-
-              <button onClick={() => seek(10)} className="text-white/80 transition-all hover:scale-110 hover:text-white">
-                <RotateCw size={36} strokeWidth={1.5} />
+              <button onClick={toggleFs} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
               </button>
             </div>
 
-            {/* BOTTOM BAR: Controls & Seek */}
-            <div className="flex flex-col gap-4">
-              {/* PROGRESS BAR (Orange) */}
-              <div className="relative h-1.5 w-full cursor-pointer rounded-full bg-white/20 overflow-hidden">
-                <div className="absolute h-full bg-orange-400 transition-all duration-100" style={{ width: `${(currentTime/duration)*100}%` }} />
-                <input 
-                  type="range" min={0} max={duration || 0} value={currentTime}
-                  onChange={(e) => { if(videoRef.current) videoRef.current.currentTime = Number(e.target.value); }}
-                  className="absolute inset-0 w-full opacity-0 cursor-pointer"
+            <div className="flex items-center justify-center gap-6 sm:gap-14">
+              <button onClick={(e) => skip(e, -10)} className="text-white/80 hover:text-primary transition-colors p-2">
+                <RotateCcw size={32} className="sm:w-10 sm:h-10" />
+              </button>
+
+              <button
+                onClick={handleTogglePlay}
+                className="h-16 w-16 sm:h-24 sm:w-24 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-xl border border-white/20 hover:scale-110 transition-all shadow-2xl"
+              >
+                {playing ? <Pause size={32} className="text-white fill-white" /> : <Play size={32} className="ml-1 text-white fill-white" />}
+              </button>
+
+              <button onClick={(e) => skip(e, 10)} className="text-white/80 hover:text-primary transition-colors p-2">
+                <RotateCw size={32} className="sm:w-10 sm:h-10" />
+              </button>
+            </div>
+
+            <div className="space-y-3 sm:space-y-5" onClick={e => e.stopPropagation()}>
+              <div className="relative h-1 sm:h-1.5 bg-white/10 rounded-full cursor-pointer group overflow-hidden">
+                <div className="absolute h-full bg-primary" style={{ width: `${playedPercent}%` }} />
+                <input
+                  type="range" min={0} max={duration || 0} value={currentTime} step="0.1"
+                  onChange={e => videoRef.current && (videoRef.current.currentTime = Number(e.target.value))}
+                  className="absolute inset-0 w-full opacity-0 cursor-pointer z-10"
                 />
               </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-6">
-                  {/* VOLUME (Orange Accent) */}
-                  <div className="flex items-center gap-2" onMouseEnter={() => setShowVolumeSlider(true)} onMouseLeave={() => setShowVolumeSlider(false)}>
-                    <button onClick={handleMuteToggle} className="text-white/80 hover:text-white transition-colors">
-                      {muted || volume === 0 ? <VolumeX size={22} /> : <Volume2 size={22} />}
-                    </button>
-                    <AnimatePresence>
-                      {showVolumeSlider && (
-                        <motion.input 
-                          initial={{ width: 0, opacity: 0 }} animate={{ width: 80, opacity: 1 }} exit={{ width: 0, opacity: 0 }}
-                          type="range" min="0" max="1" step="0.1" value={muted ? 0 : volume}
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            setVolume(val);
-                            if (videoRef.current) videoRef.current.volume = val;
-                          }}
-                          className="accent-orange-400 w-20"
-                        />
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-5">
-                  {/* SETTINGS (Quality & Speed) */}
-                  <div className="relative">
-                    <button onClick={() => setShowSettings(!showSettings)} className="text-white/80 hover:text-white transition-transform hover:rotate-45">
-                      <Settings2 size={22} />
-                    </button>
-                    
-                    <AnimatePresence>
-                      {showSettings && (
-                        <motion.div 
-                          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-                          className="absolute bottom-full right-0 mb-4 w-56 rounded-xl bg-black/95 backdrop-blur-2xl border border-white/10 p-4 shadow-2xl z-50"
-                        >
-                          <div className="space-y-4">
-                            <div>
-                              <p className="text-[10px] uppercase font-bold text-white/40 mb-2">Video Quality</p>
-                              <div className="flex flex-col gap-1 max-h-32 overflow-y-auto">
-                                {qualities.map((q) => (
-                                  <button 
-                                    key={q.value} onClick={() => { if(hlsRef.current) hlsRef.current.currentLevel = q.value; setSelectedQuality(q.value); setShowSettings(false); }}
-                                    className={`text-left px-3 py-1.5 rounded-lg text-xs transition-colors ${selectedQuality === q.value ? 'bg-orange-400 text-white' : 'text-white/60 hover:bg-white/10'}`}
-                                  >
-                                    {q.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                            <div className="border-t border-white/5 pt-3">
-                              <p className="text-[10px] uppercase font-bold text-white/40 mb-2">Speed</p>
-                              <div className="flex gap-1">
-                                {[1, 1.5, 2].map((s) => (
-                                  <button 
-                                    key={s} onClick={() => { if(videoRef.current) videoRef.current.playbackRate = s; setPlaybackRate(s); setShowSettings(false); }}
-                                    className={`flex-1 py-1 rounded-lg text-xs ${playbackRate === s ? 'bg-orange-400 text-white' : 'text-white/60 hover:bg-white/10'}`}
-                                  >
-                                    {s}x
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-
-                  <button onClick={() => videoRef.current?.requestPictureInPicture()} className="text-white/80 hover:text-white">
-                    <PictureInPicture2 size={22} />
+              <div className="flex justify-between items-center text-[10px] sm:text-xs font-mono tracking-wider">
+                <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
+                <div className="flex gap-4 items-center">
+                  <button onClick={(e) => { e.stopPropagation(); setMuted(!muted); }}>
+                    {muted ? <VolumeX size={18} className="text-primary" /> : <Volume2 size={18} />}
                   </button>
-
-                  <button onClick={toggleFullscreen} className="text-white/80 hover:text-white transition-transform hover:scale-110">
-                    {isFullscreen ? <Minimize size={22} /> : <Maximize size={22} />}
-                  </button>
+                  <button><Settings2 size={18} /></button>
                 </div>
               </div>
             </div>

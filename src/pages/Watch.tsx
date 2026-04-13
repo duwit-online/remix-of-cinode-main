@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Bookmark, BookmarkCheck, CheckCircle2, Download, LayoutPanelTop, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bookmark, BookmarkCheck, CheckCircle2, Download, Loader2 } from "lucide-react";
 import { useMovieDetail, useTVDetail, useSeasonDetail, useSimilar, useCredits } from "@/hooks/useTMDB";
 import { embedProviders, getImageUrl, getTitle, getTVExternalIds } from "@/lib/tmdb";
 import { useQuery } from "@tanstack/react-query";
@@ -17,7 +17,7 @@ import PreRollAd from "@/components/PreRollAd";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
 import CinodePlayer from "@/components/watch/CinodePlayer";
-import WatchDetailsPanel from "@/components/watch/WatchDetailsPanel";
+import WatchDetailsPanel, { WatchSidePanel } from "@/components/watch/WatchDetailsPanel";
 import { getOfflineMediaKey, getOfflineMediaRecord } from "@/lib/offlineMedia";
 
 type PlayerSource = "offline" | "telegram_bridge" | "jellyfin" | "override" | "embed" | "none";
@@ -35,7 +35,6 @@ const Watch = () => {
 
   const [season, setSeason] = useState(initialSeason);
   const [episode, setEpisode] = useState(initialEpisode);
-  const [theaterMode, setTheaterMode] = useState(false);
   const [adDone, setAdDone] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [bridgeError, setBridgeError] = useState(false);
@@ -121,7 +120,6 @@ const Watch = () => {
     mediaType === "tv" ? episode : undefined
   );
 
-  // Check if URL is a direct video
   const isDirectVideoUrl = (url: string) => {
     if (!url) return false;
     if (/\.(mp4|mkv|webm|m3u8|avi|mov|flv|wmv|ts)(\?|$)/i.test(url)) return true;
@@ -158,7 +156,6 @@ const Watch = () => {
     mediaType === "tv" ? episode : undefined
   );
 
-  // Load admin-configured playback source ordering
   const { data: playbackSourceConfig } = useQuery({
     queryKey: ["playback-sources-config"],
     queryFn: async () => {
@@ -298,7 +295,7 @@ const Watch = () => {
   if (isLoading && !offlineMeta) {
     return (
       <div className="min-h-screen bg-background pt-16 px-4">
-        <Skeleton className="w-full aspect-video max-w-6xl mx-auto rounded-[2rem]" />
+        <Skeleton className="w-full aspect-video max-w-5xl mx-auto rounded-2xl" />
       </div>
     );
   }
@@ -351,65 +348,66 @@ const Watch = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
+      {/* ── Top bar ── */}
       <div className="border-b border-border/20 bg-background/85 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-3 sm:px-4">
+        <div className="mx-auto flex max-w-7xl items-center gap-2 px-3 py-2.5 sm:px-4">
           <button onClick={() => navigate(-1)} className="rounded-full p-2 transition-colors hover:bg-secondary/50">
-            <ArrowLeft size={20} />
+            <ArrowLeft size={18} />
           </button>
-          <h1 className="flex-1 truncate font-display text-sm font-bold sm:text-base">
-            {displayTitle}
-          </h1>
+          <h1 className="flex-1 truncate text-sm font-bold">{displayTitle}</h1>
 
           <button
             onClick={isDownloaded ? removeDownload : download}
             disabled={(!canDownload && !isDownloaded) || isDownloading}
-            className="flex items-center gap-2 rounded-full bg-secondary/60 px-3 py-2 text-xs text-foreground transition-colors disabled:opacity-40"
-            title={canDownload || isDownloaded ? "Download for offline" : "Downloads work on direct streams only"}
+            className="flex items-center gap-1.5 rounded-full bg-secondary/60 px-3 py-1.5 text-[11px] text-foreground transition-colors disabled:opacity-40"
           >
             {isDownloading ? (
-              <>
-                <Loader2 size={14} className="animate-spin text-primary" />
-                {dlProgress}%
-              </>
+              <><Loader2 size={12} className="animate-spin text-primary" />{dlProgress}%</>
             ) : isDownloaded ? (
-              <>
-                <CheckCircle2 size={14} className="text-primary" />
-                Downloaded
-              </>
+              <><CheckCircle2 size={12} className="text-primary" />Downloaded</>
             ) : (
-              <>
-                <Download size={14} className="text-primary" />
-                Download
-              </>
+              <><Download size={12} className="text-primary" />Download</>
             )}
           </button>
 
           {activeSource === "offline" && (
-            <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">Offline Ready</span>
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Offline</span>
           )}
 
           <button onClick={handleToggleWatchlist} className="rounded-full p-2 transition-colors hover:bg-secondary/50">
-            {isInWatchlist ? <BookmarkCheck size={18} className="text-primary" /> : <Bookmark size={18} className="text-muted-foreground" />}
-          </button>
-          <button
-            onClick={() => setTheaterMode(!theaterMode)}
-            className={`rounded-full p-2 transition-colors ${theaterMode ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary/50"}`}
-          >
-            <LayoutPanelTop size={18} />
+            {isInWatchlist ? <BookmarkCheck size={16} className="text-primary" /> : <Bookmark size={16} className="text-muted-foreground" />}
           </button>
         </div>
       </div>
 
-      <div className="sticky top-16 z-30 px-3 pb-4 pt-3 sm:px-4">
-        <div className={`mx-auto overflow-hidden rounded-[1.75rem] border border-border/30 bg-card shadow-2xl ${theaterMode ? "max-w-6xl" : "max-w-4xl xl:max-w-5xl"}`}>
-          <div className="relative aspect-video bg-black lg:max-h-[64vh]">
-          {renderPlayer()}
+      {/* ── STICKY ZONE: Player (left) + Storyline/Cast (right) ── */}
+      <div className="sticky top-0 z-30 bg-background">
+        <div className="mx-auto max-w-7xl px-3 py-3 sm:px-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:gap-4">
+            {/* Player */}
+            <div className="w-full lg:w-[62%] xl:w-[65%]">
+              <div className="overflow-hidden rounded-2xl border border-border/30 bg-black shadow-2xl">
+                <div className="relative aspect-video">
+                  {renderPlayer()}
+                </div>
+              </div>
+            </div>
+
+            {/* Storyline + Cast (sticky beside player on desktop, below on mobile) */}
+            {detail && (
+              <div className="w-full lg:w-[38%] xl:w-[35%] lg:max-h-[calc(56.25vw*0.62)] lg:overflow-y-auto lg:scrollbar-hide"
+                style={{ maxHeight: 'clamp(280px, 36vw, 480px)' }}
+              >
+                <WatchSidePanel detail={detail as any} cast={cast} />
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="mx-auto mt-2 max-w-6xl space-y-6 px-3 sm:px-4">
-        <AdBanner placement="watch_page" className="mb-4" />
+      {/* ── SCROLLABLE ZONE: Movie details, episodes, ads ── */}
+      <div className="mx-auto mt-1 max-w-7xl space-y-5 px-3 sm:px-4">
+        <AdBanner placement="watch_page" className="mb-2" />
 
         {detail ? (
           <WatchDetailsPanel
@@ -425,16 +423,17 @@ const Watch = () => {
             onEpisodeChange={setEpisodeAndReset}
           />
         ) : offlineMeta ? (
-          <div className="glass rounded-[1.75rem] p-6">
-            <h1 className="text-2xl font-black">{offlineMeta.title}</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Offline copy ready on this device.</p>
+          <div className="rounded-2xl border border-border/20 bg-card/70 p-5">
+            <h2 className="text-xl font-black">{offlineMeta.title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Offline copy ready on this device.</p>
           </div>
         ) : null}
       </div>
 
+      {/* ── "You May Also Like" carousel ── */}
       {similar?.results && similar.results.length > 0 && (
-        <div className="mt-6">
-          <TMDBRow title="You Might Also Like" items={similar.results} variant="default" />
+        <div className="mt-5 pb-4">
+          <TMDBRow title="You May Also Like" items={similar.results} variant="default" />
         </div>
       )}
     </div>

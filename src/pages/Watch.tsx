@@ -400,17 +400,15 @@ const Watch = () => {
         </div>
       </div>
 
-      {/* Player - sticky on scroll */}
-      <div className="sticky top-[57px] z-30 bg-background/95 backdrop-blur-sm">
-        <div className={`mx-auto ${theaterMode ? "max-w-6xl" : "max-w-4xl"}`}>
-          <div className="relative aspect-video bg-black">
-            {renderPlayer()}
+      <div className="sticky top-16 z-30 px-3 pb-4 pt-3 sm:px-4">
+        <div className={`mx-auto overflow-hidden rounded-[1.75rem] border border-border/30 bg-card shadow-2xl ${theaterMode ? "max-w-6xl" : "max-w-4xl xl:max-w-5xl"}`}>
+          <div className="relative aspect-video bg-black lg:max-h-[64vh]">
+          {renderPlayer()}
           </div>
         </div>
       </div>
 
-      {/* Details below player */}
-      <div className={`mx-auto space-y-6 px-3 py-4 sm:px-4 ${theaterMode ? "max-w-6xl" : "max-w-4xl"}`}>
+      <div className="mx-auto mt-2 max-w-6xl space-y-6 px-3 sm:px-4">
         <AdBanner placement="watch_page" className="mb-4" />
 
         {detail ? (
